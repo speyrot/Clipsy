@@ -1,0 +1,26 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV_VAR=your_value  # Add necessary environment variables
+    volumes:
+      - ./backend/app:/app/app  # For live code reloading
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      retries: 3
+      start_period: 5s
+      timeout: 10s
