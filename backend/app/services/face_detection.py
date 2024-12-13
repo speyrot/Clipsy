@@ -117,6 +117,10 @@ def merge_clusters(X, labels, distance_threshold=0.5):
     return merged_labels
 
 def detect_unique_people(file_path: str, frame_skip: int = 25):
+    logger.info(f"detect_unique_people called with {file_path}, frame_skip={frame_skip}")
+    from app.utils.video_utils import ffprobe_info
+    ffprobe_info(file_path, label="face_detection start")
+    
     global scaler, pca
     logger.info(f"Starting person detection for file {file_path} with frame_skip={frame_skip}.")
     model = get_yolo_model()
@@ -237,8 +241,8 @@ def detect_and_store_speakers(video_id: int, file_path: str, db: Session, frame_
                 representative_image = person_images[representative_idx]
 
                 thumbnail_path = generate_thumbnail(representative_image, video_id, speaker_id=label)
+                logger.info(f"Thumbnail path stored in DB: {thumbnail_path}")
 
-                # Store the processed embedding (after scaler+pca) in DB
                 speaker = Speaker(
                     video_id=video_id,
                     unique_speaker_id=int(label),

@@ -6,9 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
 from app.models import Video, Speaker
 from app.routes import upload_routes, detect_routes, process_routes, status_routes, layout_routes
+import os
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+# Create thumbnails directory if it doesn't exist
+os.makedirs("app/thumbnails", exist_ok=True)
 
 app = FastAPI(title="Clipsy Backend")
 

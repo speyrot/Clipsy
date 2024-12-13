@@ -8,7 +8,7 @@ from app.models import ProcessingJob, JobStatus, Speaker, VideoStatus, Video, Jo
 from app.database import SessionLocal
 from app.services.face_detection import detect_and_store_speakers, get_yolo_model, get_reid_embedding, scaler, pca
 from app.services.scene_detection import detect_scenes
-from app.utils.video_utils import extract_frames, apply_layout_to_frame, compile_video_with_audio
+from app.utils.video_utils import extract_frames, apply_layout_to_frame, compile_video_with_audio, determine_layout, ffprobe_info
 import logging
 import json
 import numpy as np
@@ -16,12 +16,13 @@ from sqlalchemy.orm import Session
 from collections import defaultdict
 import pickle
 import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 @celery.task(name="app.services.video_processing.detect_speakers_task")
 def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
-    logger.info(f"Starting detect_speakers_task for video_id={video_id}, job_id={processing_job_id}")
+    logger.info(f"Starting detect_speakers_task for video_id={video_id}, job_id={processing_job_id}, file={file_path}")
     with SessionLocal() as db:
         try:
             processing_job = db.query(ProcessingJob).filter(ProcessingJob.id == processing_job_id).first()
@@ -66,90 +67,175 @@ def process_video_task(job_id: int, selected_speakers: list):
             job.video.status = VideoStatus.processing
             db.commit()
 
-            # Get video properties using MoviePy for accurate duration
-            clip = VideoFileClip(job.video.upload_path)
-            actual_duration = clip.duration
-            actual_fps = clip.fps
-            actual_total_frames = int(actual_duration * actual_fps)
-            clip.close()
-            
-            logger.info(f"Video properties:")
-            logger.info(f"- FPS: {actual_fps}")
-            logger.info(f"- Total frames: {actual_total_frames}")
-            logger.info(f"- Duration: {actual_duration:.2f} seconds")
+            # Use the original uploaded video file
+            original_video_path = job.video.upload_path
+            logger.info(f"Process video using original file at: {original_video_path}")
 
-            # Load speaker data and detect speakers (no changes to this part)
+            # Run ffprobe to get exact fps info
+            def get_video_info(path: str):
+                cmd = [
+                    "ffprobe", "-v", "error", "-select_streams", "v:0", 
+                    "-show_entries", "stream=duration,nb_frames",
+                    "-of", "default=noprint_wrappers=1", path
+                ]
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                duration = None
+                nb_frames = None
+                for line in result.stdout.splitlines():
+                    if line.startswith("duration="):
+                        duration = float(line.split('=')[1].strip())
+                    elif line.startswith("nb_frames="):
+                        nb_frames = float(line.split('=')[1].strip())
+                return duration, nb_frames
+
+            duration, nb_frames = get_video_info(original_video_path)
+            if duration is None or nb_frames is None:
+                logger.warning("Could not retrieve duration or nb_frames from ffprobe. Falling back to MoviePy fps.")
+                clip = VideoFileClip(original_video_path)
+                fps = clip.fps
+                clip.close()
+
+                logger.info(f"Using original nominal FPS from MoviePy: {fps} FPS for final output")
+            else:
+                fps = nb_frames / duration
+                logger.info(f"Calculated FPS from ffprobe: {fps:.4f} (nb_frames={nb_frames}, duration={duration:.2f}s)")
+
+            # Load all speakers for this video
             speaker_data = load_speakers_for_video(db, job.video_id)
             if not speaker_data:
                 raise ValueError(f"No speaker data found for video_id={job.video_id}")
-            
-            # Extract frames for detection (keeping frame_skip=30 for efficiency)
-            frames = extract_frames(job.video.upload_path, frame_skip=30)
-            logger.info(f"Extracted {len(frames)} frames for detection")
 
-            # Process scenes (no changes to scene detection)
-            scene_timestamps = detect_scenes(job.video_id, job.video.upload_path, db)
+            # Detect scenes
+            scene_timestamps = detect_scenes(job.video_id, original_video_path, db)
             if not scene_timestamps:
-                scene_timestamps = [(0, actual_duration)]
+                # If no scenes detected, treat the entire video as one scene
+                logger.info("No scenes detected. Treating entire video as one scene.")
+                if duration is None:
+                    # fallback if ffprobe failed
+                    clip = VideoFileClip(original_video_path)
+                    duration = clip.duration
+                    clip.close()
+                scene_timestamps = [(0, duration)]
+
+            # Use frame_skip=1 for final processing
+            frames = extract_frames(original_video_path, frame_skip=1)
+            total_frames = len(frames)
+            if total_frames == 0:
+                raise ValueError("No frames extracted from the original video. Cannot process.")
+
+            logger.info(f"Extracted {len(frames)} frames (no skipping) from {original_video_path} for final processing.")
+
+            # Load scaler and pca
+            models_dir = os.path.join("app", "models", str(job.video_id))
+            scaler_path = os.path.join(models_dir, 'scaler.pkl')
+            pca_path = os.path.join(models_dir, 'pca.pkl')
+
+            if not (os.path.exists(scaler_path) and os.path.exists(pca_path)):
+                logger.error("Scaler/PCA models not found. Speaker identification may fail.")
             
-            # Process each scene
+            with open(scaler_path, 'rb') as f:
+                runtime_scaler = pickle.load(f)
+            with open(pca_path, 'rb') as f:
+                runtime_pca = pickle.load(f)
+
+            def identify_speakers_in_frame_runtime(frame: np.ndarray, speaker_data: list) -> list:
+                model = get_yolo_model()
+                results = model(frame)
+                detections = results[0].boxes
+                identified_speakers = []
+                
+                for det in detections:
+                    if int(det.cls) == 0:
+                        bbox = det.xyxy[0].tolist()
+                        x1, y1, x2, y2 = map(int, bbox)
+                        x1, y1 = max(0, x1), max(0, y1)
+                        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                        person_img = frame[y1:y2, x1:x2]
+                        if person_img.size == 0:
+                            continue
+                        
+                        raw_emb = get_reid_embedding(person_img).reshape(1, -1)
+                        raw_emb = runtime_scaler.transform(raw_emb)
+                        emb = runtime_pca.transform(raw_emb)[0]
+
+                        best_id = None
+                        best_dist = float('inf')
+                        for s_db_id, s_cluster_id, s_emb in speaker_data:
+                            dist = np.linalg.norm(emb - s_emb)
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_id = s_db_id
+                        if best_id is not None:
+                            identified_speakers.append((best_id, (x1, y1, x2, y2)))
+                
+                return identified_speakers
+
             processed_frames = []
-            for scene_idx, (start_time, end_time) in enumerate(scene_timestamps):
-                # Convert time to frame indices using actual FPS
-                start_frame = int(start_time * actual_fps)
-                end_frame = min(int(end_time * actual_fps), actual_total_frames)
-                
-                # Use the nearest sampled frame for speaker detection
-                sample_frame_idx = (start_frame // 30) * 30
-                if sample_frame_idx >= len(frames):
-                    continue
-                
-                # Identify speakers from the sampled frame
-                identified = identify_speakers_in_frame(frames[sample_frame_idx // 30], speaker_data, job.video_id)
+
+            for (start_time, end_time) in scene_timestamps:
+                start_f = int(start_time * fps)
+                end_f = min(int(end_time * fps), total_frames - 1)
+
+                rep_frame_idx = max(0, min(start_f, total_frames - 1))
+                rep_frame = frames[rep_frame_idx]
+
+                identified = identify_speakers_in_frame_runtime(rep_frame, speaker_data)
                 identified = [(uid, bbox) for uid, bbox in identified if uid in selected_speakers]
-                
-                if identified:
-                    layout_config = determine_layout(len(identified))
-                    
-                    # Extract and process all frames for this scene
-                    scene_clip = VideoFileClip(job.video.upload_path).subclip(start_time, end_time)
-                    for frame in scene_clip.iter_frames():
-                        processed_frame = apply_layout_to_frame(frame, identified, layout_config)
-                        processed_frames.append(processed_frame)
-                    scene_clip.close()
 
-            # Compile video with all frames
-            if processed_frames:
-                logger.info(f"Compiling video with {len(processed_frames)} frames")
-                compiled_video_path = compile_video_with_audio(
-                    original_video_path=job.video.upload_path,
-                    processed_frames=processed_frames,
-                    fps=actual_fps  # Make sure to use actual FPS
-                )
+                layout_config = determine_layout(len(identified))
 
-                if compiled_video_path:
-                    job.processed_video_path = compiled_video_path
-                    job.status = JobStatus.completed
-                    job.video.status = VideoStatus.completed
-                    db.commit()
-                else:
-                    raise ValueError("Failed to compile video")
-            else:
-                raise ValueError("No frames were processed")
+                logger.info(f"Scene {start_time:.2f}-{end_time:.2f}s ({start_f}-{end_f} frames): {len(identified)} speakers identified.")
+
+                for f_idx in range(start_f, end_f + 1):
+                    if 0 <= f_idx < total_frames:
+                        frame = frames[f_idx]
+                        out_frame = apply_layout_to_frame(frame, identified, layout_config)
+                        if out_frame is not None:
+                            processed_frames.append(out_frame)
+                        else:
+                            logger.warning(f"Frame {f_idx} returned None after layout application.")
+
+                progress = ((end_f + 1) / total_frames) * 100 if total_frames > 0 else 100
+                job.progress = progress
+                db.commit()
+                logger.debug(f"Updated job {job_id} progress to {progress:.2f}%")
+
+            if not processed_frames:
+                logger.error("No frames were processed. Cannot compile final video.")
+                raise ValueError("No processed frames.")
+
+            logger.info(f"Compiling final video with {len(processed_frames)} frames.")
+            logger.info(f"Using fps={fps:.4f} for final compilation from ffprobe info.")
+
+            compiled_video_path = compile_video_with_audio(original_video_path, processed_frames, fps=fps)
+            if not compiled_video_path:
+                raise ValueError("Failed to compile the processed video.")
+
+            job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
+            job.video.status = VideoStatus.completed
+            job.status = JobStatus.completed
+            job.processed_video_path = compiled_video_path
+            db.commit()
+
+            logger.info(f"Video status updated to completed, final video: {compiled_video_path}")
 
         except Exception as e:
-            logger.error(f"Error in process_video_task: {e}", exc_info=True)
-            job.status = JobStatus.failed
-            job.video.status = VideoStatus.failed
-            db.commit()
+            logger.error(f"Error in process_video_task for job ID {job_id}: {e}", exc_info=True)
+            db.rollback()
+            job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
+            if job:
+                job.status = JobStatus.failed
+                job.video.status = VideoStatus.failed
+                db.commit()
             raise e
+        finally:
+            db.close()
 
 def load_speakers_for_video(db: Session, video_id: int) -> list:
     speakers = db.query(Speaker).filter(Speaker.video_id == video_id).all()
     speaker_data = []
     for speaker in speakers:
         embedding = np.array(json.loads(speaker.embedding))
-        # Store tuple of (database_id, cluster_id, embedding)
         speaker_data.append((speaker.id, speaker.unique_speaker_id, embedding))
     logger.info(f"Loaded {len(speaker_data)} speakers for video {video_id}")
     logger.info(f"Speaker data mapping: {[(s[0], s[1]) for s in speaker_data]}")
@@ -166,7 +252,6 @@ def identify_speakers_in_frame(frame: np.ndarray, speaker_data: list, video_id: 
         
         identified_speakers = []
         
-        # Load video-specific models
         models_dir = os.path.join("app", "models", str(video_id))
         with open(os.path.join(models_dir, 'scaler.pkl'), 'rb') as f:
             frame_scaler = pickle.load(f)
@@ -177,7 +262,7 @@ def identify_speakers_in_frame(frame: np.ndarray, speaker_data: list, video_id: 
             logger.info(f"Speaker DB ID: {speaker_id}, Cluster ID: {cluster_id}, Embedding norm: {np.linalg.norm(stored_emb)}")
 
         for det in detections:
-            if int(det.cls) == 0:  # person class
+            if int(det.cls) == 0:
                 bbox = det.xyxy[0].tolist()
                 x1, y1, x2, y2 = map(int, bbox)
                 person_img = frame[y1:y2, x1:x2]
@@ -214,10 +299,3 @@ def identify_speakers_in_frame(frame: np.ndarray, speaker_data: list, video_id: 
     except Exception as e:
         logger.error(f"Error in identify_speakers_in_frame: {e}", exc_info=True)
         return []
-
-def determine_layout(num_speakers: int):
-    return {
-        'width': 1080,
-        'height': 1920,
-        'num_speakers': num_speakers
-    }
