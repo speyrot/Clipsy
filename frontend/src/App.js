@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import UploadComponent from './components/UploadComponent';
 import FaceSelection from './components/FaceSelection';
-import VideoEditor from './components/VideoEditor';
+import VideoPlayer from './components/VideoPlayer';
 import axios from 'axios';
+import VideoProcessingStatus from './components/VideoProcessingStatus';
 
 function App() {
   const [videoId, setVideoId] = useState(null);
@@ -12,14 +13,19 @@ function App() {
   const [speakersLoaded, setSpeakersLoaded] = useState(false); // New state to track speaker detection
   const [speakers, setSpeakers] = useState([]);
   const [selectedSpeakers, setSelectedSpeakers] = useState([]);
-  const [videoProcessingJobId, setVideoProcessingJobId] = useState(null);
   const [processedVideoPath, setProcessedVideoPath] = useState(null);
+  const [processingJobId, setProcessingJobId] = useState(null);
 
   // Handle completion of the upload process
   const handleUploadComplete = (uploadedData) => {
     console.log("Upload Complete:", uploadedData);
     setVideoId(uploadedData.video_id);
     setSpeakerJobId(uploadedData.job_id);
+  };
+
+  const handleProcessingComplete = (path) => {
+    console.log("Processing complete, setting video path:", path);
+    setProcessedVideoPath(path);
   };
 
   // Handle when speakers are loaded after speaker detection
@@ -34,6 +40,12 @@ function App() {
     console.log("Selected Speakers:", selectedSpeakerIds);
     setSelectedSpeakers(selectedSpeakerIds);
 
+    if (selectedSpeakerIds.length === 0) {
+      // If no speakers are selected, it means the video processing is complete
+      setProcessedVideoPath(`${videoId}_processed`);
+      return;
+    }
+
     // Proceed to video processing (to be implemented)
     // For demonstration, we'll just log the selection
     // You can implement additional functionality here as needed
@@ -45,18 +57,12 @@ function App() {
         selected_speakers: selectedSpeakerIds
       });
       const { job_id } = response.data;
-      setVideoProcessingJobId(job_id);
+      setProcessingJobId(job_id);
       console.log("Video Processing Job Triggered:", job_id);
     } catch (error) {
       console.error("Error starting video processing:", error);
       // Optionally, display an error message to the user
     }
-  };
-
-  // Handle when video processing is complete (to be implemented)
-  const handleVideoProcessingComplete = (videoPath) => {
-    console.log("Video Processing Complete:", videoPath);
-    setProcessedVideoPath(videoPath);
   };
 
   return (
@@ -67,12 +73,13 @@ function App() {
       )}
       
       {/* Render FaceSelection if video is uploaded but speakers are not yet loaded */}
-      {videoId && speakerJobId && !speakersLoaded && !processedVideoPath && (
+      {videoId && speakerJobId && !speakersLoaded && (
         <FaceSelection
           videoId={videoId}
           jobId={speakerJobId}
           onSpeakersLoaded={handleSpeakersLoaded}
           onSpeakerSelection={handleSpeakerSelection}
+          processedVideoPath={processedVideoPath}
         />
       )}
       
@@ -118,9 +125,18 @@ function App() {
         </div>
       )}
       
-      {/* Render VideoEditor once video processing is complete */}
+      {/* Add VideoProcessingStatus component */}
+      {processingJobId && !processedVideoPath && (
+        <VideoProcessingStatus
+          jobId={processingJobId}
+          videoId={videoId}
+          onProcessingComplete={handleProcessingComplete}
+        />
+      )}
+      
+      {/* Render VideoPlayer once video processing is complete */}
       {processedVideoPath && (
-        <VideoEditor videoUrl={processedVideoPath} />
+        <VideoPlayer videoUrl={processedVideoPath} />
       )}
     </div>
   );

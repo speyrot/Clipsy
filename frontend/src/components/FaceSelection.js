@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-const FaceSelection = ({ videoId, jobId, onSpeakersLoaded, onSpeakerSelection }) => {
+const FaceSelection = ({ videoId, jobId, onSpeakersLoaded, onSpeakerSelection, processedVideoPath }) => {
   console.log("FaceSelection Component Mounted");
   console.log("Received jobId:", jobId);
   
@@ -34,6 +34,12 @@ const FaceSelection = ({ videoId, jobId, onSpeakersLoaded, onSpeakerSelection })
           clearInterval(pollingInterval.current);
           pollingInterval.current = null;
 
+          if (processedVideoPath) {
+            console.log("Processed video path available. Skipping speaker fetching.");
+            setLoading(false);
+            return;
+          }
+
           // Fetch speakers
           const speakerResponse = await axios.get(`http://127.0.0.1:8000/detect_speakers/${videoId}`);
           console.log("Speakers Data Response:", speakerResponse.data);
@@ -45,6 +51,9 @@ const FaceSelection = ({ videoId, jobId, onSpeakersLoaded, onSpeakerSelection })
           }
 
           setLoading(false);
+        } else if (job_status === 'completed' && processedVideoPath) {
+          console.log("Processed video path available. Updating state...");
+          onSpeakerSelection([]);
         } else if (job_status === 'failed') {
           console.error("Job failed.");
           clearInterval(pollingInterval.current);
@@ -68,7 +77,7 @@ const FaceSelection = ({ videoId, jobId, onSpeakersLoaded, onSpeakerSelection })
         clearInterval(pollingInterval.current);
       }
     };
-  }, [jobId, videoId, onSpeakersLoaded]);
+  }, [jobId, videoId, onSpeakersLoaded, onSpeakerSelection]);
 
   if (loading) {
     return (
