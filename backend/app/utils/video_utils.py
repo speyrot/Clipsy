@@ -153,6 +153,51 @@ def determine_layout(num_speakers: int) -> dict:
         }[min(num_speakers, 4)]
     }
 
+#def apply_layout_to_frame(frame: np.ndarray, identified_speakers: list, layout_config: dict) -> np.ndarray:
+#    """Apply layout to frame with identified speakers"""
+#    try:
+#        out_w = layout_config['width']
+#        out_h = layout_config['height']
+#        canvas = np.zeros((out_h, out_w, 3), dtype=np.uint8)
+#
+#        def fit_to_canvas(img, target_w, target_h):
+#            h, w = img.shape[:2]
+#            scale = min(target_w/w, target_h/h)
+#            new_w, new_h = int(w*scale), int(h*scale)
+#            return cv2.resize(img, (new_w, new_h))
+#
+#        grid = layout_config.get('grid', [])
+#        if not grid:
+#            # If no grid specified, single layout
+#            fitted = fit_to_canvas(frame, out_w, out_h)
+#            fh, fw = fitted.shape[:2]
+#            start_x = (out_w - fw) // 2
+#            start_y = (out_h - fh) // 2
+#            canvas[start_y:start_y+fh, start_x:start_x+fw] = fitted
+#            return canvas
+#
+#        # If we have a grid, assume identified_speakers <= len(grid)
+#        for i, (speaker_id, (x1, y1, x2, y2)) in enumerate(identified_speakers[:len(grid)]):
+#            speaker_img = frame[y1:y2, x1:x2]
+#            if speaker_img.size == 0:
+#                logger.warning(f"Speaker ID {speaker_id} has empty image. Skipping.")
+#                continue
+#            gx1, gy1, gx2, gy2 = grid[i]
+#            region_w = gx2 - gx1
+#            region_h = gy2 - gy1
+#            fitted = fit_to_canvas(speaker_img, region_w, region_h)
+#            fh, fw, _ = fitted.shape
+#            start_x = gx1 + (region_w - fw) // 2
+#            start_y = gy1 + (region_h - fh) // 2
+#            canvas[start_y:start_y+fh, start_x:start_x+fw] = fitted
+#            logger.debug(f"Speaker ID {speaker_id} placed at grid position {i} ({start_x},{start_y}) size {fw}x{fh}")
+#
+#        return canvas
+#
+#    except Exception as e:
+#        logger.error(f"Error in apply_layout_to_frame: {e}")
+#        return frame  # Return original frame on error
+
 def apply_layout_to_frame(frame: np.ndarray, identified_speakers: list, layout_config: dict) -> np.ndarray:
     """Apply layout to frame with identified speakers"""
     try:
@@ -160,40 +205,78 @@ def apply_layout_to_frame(frame: np.ndarray, identified_speakers: list, layout_c
         out_h = layout_config['height']
         canvas = np.zeros((out_h, out_w, 3), dtype=np.uint8)
 
-        def fit_to_canvas(img, target_w, target_h):
-            h, w = img.shape[:2]
-            scale = min(target_w/w, target_h/h)
-            new_w, new_h = int(w*scale), int(h*scale)
-            return cv2.resize(img, (new_w, new_h))
+        def fit_to_canvas(img, target_w, target_h, orig_coords):
+            # Get original face region dimensions
+            orig_x1, orig_y1, orig_x2, orig_y2 = orig_coords
+            face_h, face_w = img.shape[:2]
+            
+            # Add significant padding around the face (150% on each side)
+            pad_x = int(face_w * 1.5)
+            pad_y = int(face_h * 1.5)
+            
+            # Calculate padded coordinates while keeping face centered
+            pad_y1 = max(0, orig_y1 - pad_y)
+            pad_y2 = min(frame.shape[0], orig_y2 + pad_y)
+            pad_x1 = max(0, orig_x1 - pad_x)
+            pad_x2 = min(frame.shape[1], orig_x2 + pad_x)
+            
+            # Extract the padded region
+            padded_img = frame[pad_y1:pad_y2, pad_x1:pad_x2]
+            if padded_img.size == 0:
+                return img
+            
+            # Scale to fill the target area completely
+            h, w = padded_img.shape[:2]
+            # Use max instead of min to ensure we fill the entire space
+            scale = max(target_w/w, target_h/h)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            resized = cv2.resize(padded_img, (new_w, new_h))
+            
+            # Center and crop to target size
+            start_y = (new_h - target_h) // 2
+            start_x = (new_w - target_w) // 2
+            end_y = start_y + target_h
+            end_x = start_x + target_w
+            
+            # Ensure we don't exceed the resized image dimensions
+            start_y = max(0, min(start_y, new_h - target_h))
+            start_x = max(0, min(start_x, new_w - target_w))
+            end_y = min(new_h, start_y + target_h)
+            end_x = min(new_w, start_x + target_w)
+            
+            cropped = resized[start_y:end_y, start_x:end_x]
+            
+            # Final resize to ensure exact target dimensions
+            if cropped.shape[:2] != (target_h, target_w):
+                cropped = cv2.resize(cropped, (target_w, target_h))
+            
+            return cropped
 
         grid = layout_config.get('grid', [])
         if not grid:
-            # If no grid specified, single layout
-            fitted = fit_to_canvas(frame, out_w, out_h)
-            fh, fw = fitted.shape[:2]
-            start_x = (out_w - fw) // 2
-            start_y = (out_h - fh) // 2
-            canvas[start_y:start_y+fh, start_x:start_x+fw] = fitted
+            # Single layout
+            fitted = fit_to_canvas(frame, out_w, out_h, (0, 0, frame.shape[1], frame.shape[0]))
+            canvas = fitted  # Direct assignment since it's already the right size
             return canvas
 
-        # If we have a grid, assume identified_speakers <= len(grid)
+        # Multiple speakers
         for i, (speaker_id, (x1, y1, x2, y2)) in enumerate(identified_speakers[:len(grid)]):
             speaker_img = frame[y1:y2, x1:x2]
             if speaker_img.size == 0:
                 logger.warning(f"Speaker ID {speaker_id} has empty image. Skipping.")
                 continue
+            
             gx1, gy1, gx2, gy2 = grid[i]
             region_w = gx2 - gx1
             region_h = gy2 - gy1
-            fitted = fit_to_canvas(speaker_img, region_w, region_h)
-            fh, fw, _ = fitted.shape
-            start_x = gx1 + (region_w - fw) // 2
-            start_y = gy1 + (region_h - fh) // 2
-            canvas[start_y:start_y+fh, start_x:start_x+fw] = fitted
-            logger.debug(f"Speaker ID {speaker_id} placed at grid position {i} ({start_x},{start_y}) size {fw}x{fh}")
+            
+            # Fit the image to exactly fill the grid region
+            fitted = fit_to_canvas(speaker_img, region_w, region_h, (x1, y1, x2, y2))
+            canvas[gy1:gy2, gx1:gx2] = fitted
 
         return canvas
 
     except Exception as e:
         logger.error(f"Error in apply_layout_to_frame: {e}")
-        return frame  # Return original frame on error
+        return frame

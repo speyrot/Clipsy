@@ -43,7 +43,10 @@ async def process_video_endpoint(request: ProcessRequest, db: Session = Depends(
     # Initiate the Celery task
     try:
         logger.info(f"Triggering video processing task for video ID {video.id}")
-        process_video_task.delay(processing_job.id, request.selected_speakers)
+        process_video_task.delay(
+            job_id=processing_job.id,
+            selected_speakers=request.selected_speakers
+        )
         logger.info(f"Video processing task triggered successfully for video ID {video.id}")
     except Exception as e:
         logger.error(f"Error initiating video processing: {e}")
