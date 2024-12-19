@@ -128,28 +128,36 @@ def detect_unique_people(file_path: str, frame_skip: int = 25):
 
     for idx, frame in enumerate(frames, start=1):
         try:
-            # Get face detections
             faces = detector.get(frame)
             logger.info(f"Frame {idx}: Found {len(faces)} faces")
             
-            # Track faces in this frame
-            frame_faces = []  # Add this line
+            # Calculate face sizes and determine threshold
+            if faces:
+                face_sizes = [(i, (face.bbox[2]-face.bbox[0]) * (face.bbox[3]-face.bbox[1])) 
+                             for i, face in enumerate(faces)]
+                face_sizes.sort(key=lambda x: x[1], reverse=True)
+                
+                # Use largest face as reference
+                largest_face_size = face_sizes[0][1]
+                # Set threshold at 20% of largest face size
+                size_threshold = largest_face_size * 0.2
+                
+                logger.info(f"Frame {idx}: Largest face size: {largest_face_size}, threshold: {size_threshold}")
+            
+            frame_faces = []
             
             for face_idx, face in enumerate(faces):
                 try:
-                    # Get bounding box
                     bbox = face.bbox.astype(int)
                     x1, y1, x2, y2 = bbox
+                    face_size = (x2 - x1) * (y2 - y1)
 
-                    # Skip faces that are too small
-                    face_width = x2 - x1
-                    face_height = y2 - y1
-                    if face_width < 60 or face_height < 60:
-                        logger.warning(f"Frame {idx}: Skipping small face {face_idx}: {face_width}x{face_height}")
+                    if face_size < size_threshold:
+                        logger.warning(f"Frame {idx}: Skipping small face {face_idx}: {x2-x1}x{y2-y1} (area: {face_size} < threshold: {size_threshold})")
                         continue
 
                     # Add padding around face
-                    padding = int(min(face_width, face_height) * 0.2)
+                    padding = int(min(face_size, face_size) * 0.2)
                     x1 = max(0, x1 - padding)
                     y1 = max(0, y1 - padding)
                     x2 = min(frame.shape[1], x2 + padding)

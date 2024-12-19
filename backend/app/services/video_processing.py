@@ -164,16 +164,26 @@ def process_video_task(job_id: int, selected_speakers: list):
                     return identified_speakers
 
                 try:
+                    # Calculate face sizes and determine threshold
+                    face_sizes = [(i, (face.bbox[2]-face.bbox[0]) * (face.bbox[3]-face.bbox[1])) 
+                                 for i, face in enumerate(detections)]
+                    face_sizes.sort(key=lambda x: x[1], reverse=True)
+                    
+                    # Use largest face as reference
+                    largest_face_size = face_sizes[0][1]
+                    # Set threshold at 20% of largest face size
+                    size_threshold = largest_face_size * 0.2
+                    
+                    logger.info(f"Largest face size: {largest_face_size}, threshold: {size_threshold}")
+
                     for i, face in enumerate(detections):
                         try:
                             bbox = face.bbox.tolist()
                             x1, y1, x2, y2 = map(int, bbox)
-                            face_width = x2 - x1
-                            face_height = y2 - y1
+                            face_size = (x2 - x1) * (y2 - y1)
                             
-                            # Skip faces smaller than 100x100 pixels
-                            if face_width < 100 or face_height < 100:
-                                logger.warning(f"Skipping small face {i+1}: {face_width}x{face_height}")
+                            if face_size < size_threshold:
+                                logger.warning(f"Skipping small face {i+1}: {x2-x1}x{y2-y1} (area: {face_size} < threshold: {size_threshold})")
                                 continue
 
                             emb = face.embedding
