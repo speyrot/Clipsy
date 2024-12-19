@@ -225,15 +225,15 @@ def process_video_task(job_id: int, selected_speakers: list):
                                 
                                 # Base threshold varies based on best distance
                                 if best_dist < 0.3:  # Very good match
-                                    base_threshold = 0.6
+                                    base_threshold = 0.7
                                 elif best_dist < 0.5:  # Good match
-                                    base_threshold = 0.55
-                                else:  # Weaker match with good separation
-                                    # If there's good separation between matches, be more lenient
+                                    base_threshold = 0.65
+                                else:  # Weaker match
+                                    # Always use more lenient threshold for weaker matches
+                                    base_threshold = 1.2
+                                    # Add extra leniency if there's good separation
                                     if dist_gap > 0.4 or relative_diff > 0.4:
-                                        base_threshold = 1.2
-                                    else:
-                                        base_threshold = 0.8
+                                        base_threshold = 1.4
                                 
                                 # Adjust threshold based on gap and relative difference
                                 adaptive_threshold = base_threshold
