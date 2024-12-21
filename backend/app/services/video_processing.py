@@ -56,8 +56,8 @@ def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
             db.close()
 
 @celery.task(name="app.services.video_processing.process_video_task")
-def process_video_task(job_id: int, selected_speakers: list):
-    logger.info(f"Starting process_video_task for job_id={job_id}, selected_speakers={selected_speakers}")
+def process_video_task(video_id: int, job_id: int):
+    logger.info(f"Starting process_video_task for video_id={video_id}, job_id={job_id}")
 
     with SessionLocal() as db:
         try:
@@ -106,22 +106,12 @@ def process_video_task(job_id: int, selected_speakers: list):
             face_detector = load_face_detector()
             logger.info("Face detector initialized")
 
-            # Get all speakers for this video
-            speaker_data = [(s.id, s.unique_speaker_id) for s in db.query(Speaker).filter(
-                Speaker.video_id == job.video_id,
-                Speaker.id.in_(selected_speakers)
-            ).all()]
-            
-            logger.info(f"Available speaker data: {speaker_data}")
-            logger.info(f"Selected speakers: {selected_speakers}")
-
             # Detect scenes
             scene_timestamps = detect_scenes(job.video_id, original_video_path, db)
             if not scene_timestamps:
                 # If no scenes detected, treat the entire video as one scene
                 logger.info("No scenes detected. Treating entire video as one scene.")
                 if duration is None:
-                    # fallback if ffprobe failed
                     clip = VideoFileClip(original_video_path)
                     duration = clip.duration
                     clip.close()
@@ -140,19 +130,6 @@ def process_video_task(job_id: int, selected_speakers: list):
             test_detections = face_detector.get(test_frame)
             logger.info(f"Face detector test: found {len(test_detections) if test_detections is not None else 0} faces in test frame")
 
-            # Load scaler and pca
-            models_dir = os.path.join("app", "models", str(job.video_id))
-            scaler_path = os.path.join(models_dir, 'scaler.pkl')
-            pca_path = os.path.join(models_dir, 'pca.pkl')
-
-            if not (os.path.exists(scaler_path) and os.path.exists(pca_path)):
-                logger.error("Scaler/PCA models not found. Speaker identification may fail.")
-            
-            with open(scaler_path, 'rb') as f:
-                runtime_scaler = pickle.load(f)
-            with open(pca_path, 'rb') as f:
-                runtime_pca = pickle.load(f)
-
             def identify_speakers_in_frame_runtime(frame: np.ndarray, speaker_data: list, face_detector, video_id: int, db: Session) -> list:
                 logger.info("Starting face detection...")
                 detections = face_detector.get(frame)
@@ -166,12 +143,10 @@ def process_video_task(job_id: int, selected_speakers: list):
                 try:
                     # Calculate face sizes and determine threshold
                     face_sizes = [(i, (face.bbox[2]-face.bbox[0]) * (face.bbox[3]-face.bbox[1])) 
-                                 for i, face in enumerate(detections)]
+                                for i, face in enumerate(detections)]
                     face_sizes.sort(key=lambda x: x[1], reverse=True)
                     
-                    # Use largest face as reference
                     largest_face_size = face_sizes[0][1]
-                    # Set threshold at 20% of largest face size
                     size_threshold = largest_face_size * 0.2
                     
                     logger.info(f"Largest face size: {largest_face_size}, threshold: {size_threshold}")
@@ -186,72 +161,9 @@ def process_video_task(job_id: int, selected_speakers: list):
                                 logger.warning(f"Skipping small face {i+1}: {x2-x1}x{y2-y1} (area: {face_size} < threshold: {size_threshold})")
                                 continue
 
-                            emb = face.embedding
-                            logger.info(f"Processing face {i+1} embedding shape: {emb.shape}")
-                            
-                            # Transform the current embedding using the same pipeline
-                            emb_scaled = runtime_scaler.transform(emb.reshape(1, -1))
-                            emb_transformed = runtime_pca.transform(emb_scaled).flatten()
-                            
-                            # Calculate all distances first
-                            distances = []
-                            for db_id, unique_id in speaker_data:
-                                try:
-                                    speaker = db.query(Speaker).get(db_id)
-                                    if not speaker:
-                                        continue
-                                        
-                                    s_emb_array = np.array(json.loads(speaker.embedding))
-                                    
-                                    similarity = np.dot(emb_transformed, s_emb_array) / (
-                                        np.linalg.norm(emb_transformed) * np.linalg.norm(s_emb_array))
-                                    dist = 1 - similarity
-                                    distances.append((db_id, dist))
-                                except Exception as e:
-                                    logger.error(f"Error comparing with speaker {db_id}: {str(e)}")
-                                    continue
-
-                            # Sort distances and calculate adaptive threshold
-                            distances.sort(key=lambda x: x[1])
-                            logger.info(f"Sorted distances for face {i+1}: {distances}")
-
-                            if distances:
-                                best_id, best_dist = distances[0]
-                                second_best_dist = distances[1][1] if len(distances) > 1 else float('inf')
-                                
-                                # Calculate gap and relative difference
-                                dist_gap = second_best_dist - best_dist
-                                relative_diff = dist_gap / best_dist if best_dist > 0 else float('inf')
-                                
-                                # Base threshold varies based on best distance
-                                if best_dist < 0.3:  # Very good match
-                                    base_threshold = 0.7
-                                elif best_dist < 0.5:  # Good match
-                                    base_threshold = 0.65
-                                else:  # Weaker match
-                                    # Always use more lenient threshold for weaker matches
-                                    base_threshold = 1.2
-                                    # Add extra leniency if there's good separation
-                                    if dist_gap > 0.4 or relative_diff > 0.4:
-                                        base_threshold = 1.4
-                                
-                                # Adjust threshold based on gap and relative difference
-                                adaptive_threshold = base_threshold
-                                if dist_gap > 0.3 or relative_diff > 1.0:  # Clear separation
-                                    adaptive_threshold += 0.2
-                                elif dist_gap > 0.15 or relative_diff > 0.5:  # Moderate separation
-                                    adaptive_threshold += 0.1
-                                
-                                logger.info(f"Face {i+1} - Best dist: {best_dist}, Second best: {second_best_dist}, "
-                                          f"Gap: {dist_gap}, Relative diff: {relative_diff}, "
-                                          f"Base threshold: {base_threshold}, Final threshold: {adaptive_threshold}")
-
-                                if best_dist < adaptive_threshold:
-                                    x1, y1, x2, y2 = map(int, bbox)
-                                    identified_speakers.append((best_id, (x1, y1, x2, y2)))
-                                    logger.info(f"Face {i+1} matched to speaker {best_id} with distance {best_dist}")
-                                else:
-                                    logger.warning(f"No match found for face {i+1} (best distance {best_dist} > threshold {adaptive_threshold})")
+                            # Just use the face index as the ID
+                            identified_speakers.append((i + 1, (x1, y1, x2, y2)))
+                            logger.info(f"Added face {i+1} to identified speakers")
 
                         except Exception as e:
                             logger.error(f"Error processing face {i+1}: {str(e)}")
@@ -274,22 +186,16 @@ def process_video_task(job_id: int, selected_speakers: list):
 
                 # Debug logging for speaker identification
                 logger.info(f"Processing scene from {start_time:.2f}s to {end_time:.2f}s")
-                logger.info(f"Available speaker data: {[(s[0], s[1]) for s in speaker_data]}")
-                logger.info(f"Selected speakers: {selected_speakers}")
 
                 # Identify speakers in the representative frame
                 identified = identify_speakers_in_frame_runtime(
                     frame=rep_frame,
-                    speaker_data=speaker_data,
+                    speaker_data=[],
                     face_detector=face_detector,
                     video_id=job.video_id,
                     db=db
                 )
                 logger.info(f"All identified speakers in frame: {[uid for uid, _ in identified]}")
-                
-                # Filter for selected speakers
-                identified = [(uid, bbox) for uid, bbox in identified if uid in selected_speakers]
-                logger.info(f"Filtered selected speakers: {[uid for uid, _ in identified]}")
 
                 layout_config = determine_layout(len(identified))
                 logger.info(f"Using layout config for {len(identified)} speakers")

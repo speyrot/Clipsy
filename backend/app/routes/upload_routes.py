@@ -9,7 +9,7 @@ import subprocess
 from app.config import settings
 from app.database import get_db
 from app.models import Video, ProcessingJob, VideoStatus, JobStatus, JobType
-from app.services.video_processing import detect_speakers_task
+from app.services.video_processing import process_video_task
 import logging
 
 router = APIRouter()
@@ -93,31 +93,34 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
     # Run ffprobe on CFR file
     run_ffprobe(cfr_path, label="after CFR conversion")
 
-    # Create video entry in DB with CFR path
-    video = Video(upload_path=cfr_path, status=VideoStatus.uploaded)
+    # Create video entry
+    video = Video(
+        upload_path=cfr_path,
+        status=VideoStatus.uploaded
+    )
     db.add(video)
     db.commit()
     db.refresh(video)
 
+    # Create processing job directly for video processing
     processing_job = ProcessingJob(
         video_id=video.id,
         status=JobStatus.pending,
         progress=0.0,
-        job_type=JobType.speaker_detection
+        job_type=JobType.video_processing
     )
     db.add(processing_job)
     db.commit()
     db.refresh(processing_job)
 
-    try:
-        logger.info(f"Triggering speaker detection task for video ID {video.id}, file: {cfr_path}")
-        detect_speakers_task.delay(video.id, cfr_path, processing_job.id)
-        logger.info(f"Speaker detection task triggered successfully for video ID {video.id}")
-    except Exception as e:
-        logger.error(f"Error in detecting speakers: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error in detecting speakers: {str(e)}")
-    
-    return JSONResponse(content={"video_id": video.id, "job_id": processing_job.id}, status_code=201)
+    # Trigger video processing directly
+    process_video_task.delay(video.id, processing_job.id)
+    logger.info(f"Video processing task triggered for video ID {video.id}")
+
+    return JSONResponse(
+        content={"video_id": video.id, "job_id": processing_job.id},
+        status_code=201
+    )
 
 @router.get("/processing_status/{video_id}", summary="Check the processing status of a video")
 async def check_processing_status(video_id: int, db: Session = Depends(get_db)):

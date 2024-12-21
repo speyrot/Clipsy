@@ -1,3 +1,5 @@
+// frontend/src/components/VideoProcessingStatus.js
+
 import React, { useEffect, useRef } from 'react';
 import axios from 'axios';
 
