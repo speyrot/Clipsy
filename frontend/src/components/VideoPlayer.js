@@ -1,6 +1,7 @@
 // frontend/src/components/VideoPlayer.js
 
 import React, { useRef, useState, useEffect } from 'react';
+import { Switch } from '@headlessui/react';
 
 const formatTime = (timeInSeconds) => {
   if (isNaN(timeInSeconds)) return "00:00";
@@ -12,15 +13,17 @@ const formatTime = (timeInSeconds) => {
 
 const VideoPlayer = ({ videoUrl }) => {
   const videoRef = useRef(null);
-  
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [resolution, setResolution] = useState('480p');
+  const [autoCaptions, setAutoCaptions] = useState(false);
 
   const progressBarRef = useRef(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
-  
+
   useEffect(() => {
     const video = videoRef.current;
 
@@ -85,7 +88,7 @@ const VideoPlayer = ({ videoUrl }) => {
 
   const getRatioFromEvent = (e) => {
     const rect = progressBarRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left; 
+    const x = e.clientX - rect.left;
     let ratio = x / rect.width;
     ratio = Math.min(Math.max(ratio, 0), 1);
     return ratio;
@@ -101,7 +104,7 @@ const VideoPlayer = ({ videoUrl }) => {
     if (isScrubbing) {
       const ratio = getRatioFromEvent(e);
       const newTime = ratio * duration;
-      setCurrentTime(newTime); // Update currentTime while scrubbing for immediate feedback
+      setCurrentTime(newTime);
     }
   };
 
@@ -124,86 +127,144 @@ const VideoPlayer = ({ videoUrl }) => {
 
   const progressPercentage = duration ? (currentTime / duration) * 100 : 0;
 
+  const handleResolutionChange = (e) => {
+    setResolution(e.target.value);
+  };
+
   return (
-    <div className="max-w-[320px] w-full mx-auto overflow-hidden rounded shadow-[0_0_15px_1px_rgba(255,0,255,0.6)] bg-black">
-      <div className="relative">
-        {/* 9:16 aspect ratio container */}
+    <div className="mx-auto max-w-xs w-full bg-white rounded-lg shadow-md overflow-hidden">
+      {/* Video Container */}
+      <div className="relative bg-black">
+        {/* Maintain 9:16 aspect ratio */}
         <div className="relative w-full" style={{ paddingTop: '177.78%' }}>
           <video
             ref={videoRef}
-            className="absolute top-0 left-0 w-full h-full object-contain bg-black"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
             preload="metadata"
           >
-            <source src={`http://127.0.0.1:8000/processed_video/${videoUrl}`} type="video/mp4" />
+            <source
+              src={`http://127.0.0.1:8000/processed_video/${videoUrl}`}
+              type="video/mp4"
+            />
             Your browser does not support the video tag.
           </video>
         </div>
 
-        {/* Controls Overlay (fixed at bottom) */}
+        {/* Controls Overlay */}
         <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparent text-white p-3 space-y-3">
           {/* Timeline */}
-          <div 
-            className="group relative h-2 bg-gray-500 rounded hover:bg-gray-400 cursor-pointer"
+          <div
+            className="group relative h-2 bg-white/20 rounded cursor-pointer"
             ref={progressBarRef}
             onMouseDown={handleProgressBarMouseDown}
           >
-            <div 
-              className="absolute top-0 left-0 h-2 bg-red-600 rounded" 
+            <div
+              className="absolute top-0 left-0 h-2 bg-purple-500 rounded transition-width duration-150"
               style={{ width: `${progressPercentage}%` }}
             ></div>
             {/* Thumb/Handle */}
             {!isNaN(progressPercentage) && (
-              <div 
-                className={`absolute top-0 h-2 w-2 bg-white rounded-full transform -translate-x-1/2 ${isScrubbing ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity duration-200'}`}
+              <div
+                className={`absolute top-0 h-2 w-2 bg-white rounded-full transform -translate-x-1/2
+                  ${isScrubbing ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity duration-200'}`}
                 style={{ left: `${progressPercentage}%` }}
               ></div>
             )}
           </div>
 
-          {/* Time and Controls Row */}
-          <div className="flex items-center justify-between">
+          {/* Time + Controls Row */}
+          <div className="flex items-center justify-between text-sm">
             {/* Current Time / Duration */}
-            <div className="text-sm flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
               <span>{formatTime(currentTime)}</span>
               <span>/</span>
               <span>{formatTime(duration)}</span>
             </div>
 
+            {/* Control Buttons */}
             <div className="flex items-center space-x-4">
-              {/* Play/Pause Button */}
+              {/* Play/Pause */}
               <button
                 onClick={handlePlayPause}
-                className="focus:outline-none"
-                title={isPlaying ? "Pause" : "Play"}
+                className="focus:outline-none hover:text-gray-300"
+                title={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? (
-                  <svg className="w-6 h-6 text-white hover:text-gray-200" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6"/>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M10 9v6m4-6v6"
+                    />
                   </svg>
                 ) : (
-                  <svg className="w-6 h-6 text-white hover:text-gray-200" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M14.752 11.168l-3.197-2.132A1
+                        1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1
+                        1 0 000-1.664z"
+                    />
                   </svg>
                 )}
               </button>
 
-              {/* Restart Button */}
+              {/* Restart */}
               <button
                 onClick={handleRestart}
-                className="focus:outline-none"
+                className="focus:outline-none hover:text-gray-300"
                 title="Restart"
               >
-                <svg className="w-6 h-6 text-white hover:text-gray-200" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1
+                      1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0
+                      01-1 1h-3m-6 0a1 1 0 001-1v-4a1
+                      1 0 011-1h2a1 1 0 011 1v4a1
+                      1 0 001 1m-6 0h6"
+                  />
                 </svg>
               </button>
 
-              {/* Volume Control */}
-              <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5l-6 6h-3v2h3l6 6V5zm8.5 6A4.5 4.5 0 0015 6.5v11a4.5 4.5 0 004.5-4.5z"/>
+              {/* Volume */}
+              <div className="flex items-center space-x-1">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M11 5l-6 6H2v2h3l6
+                      6V5zm8.5 6A4.5 4.5 0 0015
+                      6.5v11a4.5 4.5 0 004.5-4.5z"
+                  />
                 </svg>
-                <input 
+                <input
                   type="range"
                   min="0"
                   max="1"
@@ -213,6 +274,36 @@ const VideoPlayer = ({ videoUrl }) => {
                   className="w-16 appearance-none bg-transparent focus:outline-none"
                   title="Volume"
                 />
+              </div>
+
+              {/* Resolution Dropdown */}
+              <select
+                value={resolution}
+                onChange={handleResolutionChange}
+                className="border rounded px-2 py-1 text-sm focus:outline-none w-24"
+              >
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </select>
+
+              {/* Auto Caption Toggle */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  checked={autoCaptions}
+                  onChange={setAutoCaptions}
+                  className={`${
+                    autoCaptions ? 'bg-purple-600' : 'bg-gray-200'
+                  } relative inline-flex h-5 w-9 items-center rounded-full transition-colors`}
+                >
+                  <span className="sr-only">Enable auto-captions</span>
+                  <span
+                    className={`${
+                      autoCaptions ? 'translate-x-5' : 'translate-x-1'
+                    } inline-block h-3 w-3 transform rounded-full bg-white transition-transform`}
+                  />
+                </Switch>
+                <span className="text-sm text-white">Auto-captions</span>
               </div>
             </div>
           </div>

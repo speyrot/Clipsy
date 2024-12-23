@@ -39,23 +39,18 @@ function Navbar() {
             </Link>
           </li>
           <li>
-            <Link to="/process" className={getLinkClasses('/process')}>
-              Process
+            <Link to="/create" className={getLinkClasses('/create')}>
+              Create
             </Link>
           </li>
           <li>
-            <Link to="/drafts" className={getLinkClasses('/drafts')}>
-              Drafts
+            <Link to="/todos" className={getLinkClasses('/todos')}>
+              To-Do's
             </Link>
           </li>
           <li>
             <Link to="/calendar" className={getLinkClasses('/calendar')}>
               Calendar
-            </Link>
-          </li>
-          <li>
-            <Link to="/publish" className={getLinkClasses('/publish')}>
-              Publish
             </Link>
           </li>
         </ul>

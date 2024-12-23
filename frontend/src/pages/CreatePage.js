@@ -24,7 +24,7 @@ function ProcessPage() {
   return (
     <div className="px-8 py-6">
       {/* Heading */}
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Process</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Create</h1>
 
       {/* Upload Section */}
       {!videoId && (

@@ -4,10 +4,9 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import DashboardPage from './pages/DashboardPage';
-import ProcessPage from './pages/ProcessPage';
-import DraftsPage from './pages/DraftsPage';
+import CreatePage from './pages/CreatePage';
+import ToDosPage from './pages/ToDosPage';
 import CalendarPage from './pages/CalendarPage';
-import PublishPage from './pages/PublishPage';
 
 function App() {
   return (
@@ -25,10 +24,9 @@ function App() {
               - The other pages at "/process", "/drafts", "/calendar", "/publish"
             */}
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/process" element={<ProcessPage />} />
-            <Route path="/drafts" element={<DraftsPage />} />
+            <Route path="/create" element={<CreatePage />} />
+            <Route path="/todos" element={<ToDosPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/publish" element={<PublishPage />} />
           </Routes>
         </main>
       </div>
