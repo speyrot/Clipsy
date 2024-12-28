@@ -31,3 +31,7 @@ class User(Base):
 
     # Relationship to videos
     videos = relationship("Video", back_populates="owner")
+
+    # Relationship to tasks & tags
+    tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
+    tags = relationship("Tag", back_populates="user", cascade="all, delete-orphan")
