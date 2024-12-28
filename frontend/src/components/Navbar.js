@@ -1,11 +1,12 @@
 // frontend/src/components/Navbar.js
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 function Navbar() {
   const location = useLocation();
-  
-  // Function to determine if a link is active
+  const navigate = useNavigate();
+
+  // Determine if nav link is active
   const isActive = (path) => {
     if (path === '/' && location.pathname === '/') {
       return true;
@@ -13,11 +14,17 @@ function Navbar() {
     return path !== '/' && location.pathname.startsWith(path);
   };
 
-  // Function to get classes for nav links
+  // Generate classes for nav links
   const getLinkClasses = (path) => {
     return isActive(path)
-      ? "text-purple-600 font-semibold border-b-2 border-purple-600 pb-1" // Active state
-      : "text-gray-500 hover:text-gray-900 pb-1 border-b-2 border-transparent"; // Inactive state
+      ? "text-purple-600 font-semibold border-b-2 border-purple-600 pb-1"
+      : "text-gray-500 hover:text-gray-900 pb-1 border-b-2 border-transparent";
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/signin'); // go back to sign-in page
   };
 
   return (
@@ -56,10 +63,10 @@ function Navbar() {
         </ul>
       </div>
 
-      {/* Right Section: Notification Bell + Avatar */}
+      {/* Right Section: Notification + Avatar + Logout */}
       <div className="flex items-center space-x-6">
         <button className="relative text-gray-600 hover:text-gray-800 focus:outline-none">
-          {/* Notification Icon */}
+          {/* Notification icon */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -86,6 +93,14 @@ function Navbar() {
           alt="User Avatar"
           className="w-9 h-9 rounded-full object-cover"
         />
+
+        {/* Logout button */}
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 text-white px-4 py-2 rounded"
+        >
+          Logout
+        </button>
       </div>
     </nav>
   );

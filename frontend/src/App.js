@@ -1,38 +1,75 @@
 // frontend/src/App.js
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
+
 import DashboardPage from './pages/DashboardPage';
 import CreatePage from './pages/CreatePage';
 import ToDosPage from './pages/ToDosPage';
 import CalendarPage from './pages/CalendarPage';
+import SignInPage from './pages/SignInPage';
+import SignUpPage from './pages/SignUpPage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
+  // Initialize state from localStorage
+  const [token, setToken] = useState(localStorage.getItem('access_token') || '');
+
+  // Listen for sign in changes via localStorage (optional but can help if multiple tabs)
+  useEffect(() => {
+    const onStorageChange = () => {
+      setToken(localStorage.getItem('access_token') || '');
+    };
+    window.addEventListener('storage', onStorageChange);
+    return () => window.removeEventListener('storage', onStorageChange);
+  }, []);
+
   return (
     <Router>
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        {/* Top Navigation Bar */}
-        <Navbar />
+      {/* Conditionally render the Navbar if we have a token in state */}
+      {token && <Navbar onLogout={() => setToken('')} />}
 
-        {/* Main Content */}
-        <main className="flex-grow">
-          <Routes>
-            {/* 
-              By convention:
-              - The Dashboard is shown at the root URL "/"
-              - The other pages at "/process", "/drafts", "/calendar", "/publish"
-            */}
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/create" element={<CreatePage />} />
-            <Route path="/todos" element={<ToDosPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/signin" element={<SignInPage setToken={setToken} />} />
+        <Route path="/signup" element={<SignUpPage />} />
+
+        {/* Protected Routes */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute token={token}>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/create"
+          element={
+            <ProtectedRoute token={token}>
+              <CreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/todos"
+          element={
+            <ProtectedRoute token={token}>
+              <ToDosPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/calendar"
+          element={
+            <ProtectedRoute token={token}>
+              <CalendarPage />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </Router>
   );
 }
 
 export default App;
-

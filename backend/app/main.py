@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
 from app.models import Video, Speaker
-from app.routes import upload_routes, detect_routes, process_routes, status_routes, layout_routes, processed_video_routes
+from app.routes import upload_routes, detect_routes, process_routes, status_routes, layout_routes, processed_video_routes, auth_routes, user_routes
 import os
 
 # Create tables
@@ -30,7 +30,8 @@ app.include_router(process_routes.router)
 app.include_router(status_routes.router)
 app.include_router(layout_routes.router)
 app.include_router(processed_video_routes.router)
-
+app.include_router(auth_routes.router)
+app.include_router(user_routes.router)
 # Serve the thumbnails directory
 app.mount("/thumbnails", StaticFiles(directory="app/thumbnails"), name="thumbnails")
 

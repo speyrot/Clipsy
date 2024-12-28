@@ -1,7 +1,7 @@
 """add original upload path
 
 Revision ID: xxxx
-Revises: previous_revision
+Revises: 20a80491f51f
 Create Date: 2023-12-13 10:03:48.721
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = 'xxxx'  # Alembic will generate this
-down_revision = 'previous_revision'  # Replace with your previous revision
+revision = 'xxxx'
+down_revision = '20a80491f51f'
 branch_labels = None
 depends_on = None
 
