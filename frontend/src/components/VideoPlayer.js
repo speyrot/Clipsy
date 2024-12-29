@@ -119,11 +119,12 @@ const VideoPlayer = ({ videoUrl }) => {
   useEffect(() => {
     document.addEventListener('mousemove', handleDocumentMouseMove);
     document.addEventListener('mouseup', handleDocumentMouseUp);
+
     return () => {
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
     };
-  }, [isScrubbing, duration]);
+  }, [handleDocumentMouseMove, handleDocumentMouseUp]);
 
   const progressPercentage = duration ? (currentTime / duration) * 100 : 0;
 

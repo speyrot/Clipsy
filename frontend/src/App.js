@@ -5,7 +5,7 @@ import Navbar from './components/Navbar';
 
 import DashboardPage from './pages/DashboardPage';
 import CreatePage from './pages/CreatePage';
-import ToDosPage from './pages/ToDosPage';
+import PlanPage from './pages/PlanPage';
 import CalendarPage from './pages/CalendarPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
@@ -52,10 +52,10 @@ function App() {
           }
         />
         <Route
-          path="/todos"
+          path="/plan"
           element={
             <ProtectedRoute token={token}>
-              <ToDosPage />
+              <PlanPage />
             </ProtectedRoute>
           }
         />

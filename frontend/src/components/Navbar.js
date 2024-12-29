@@ -51,8 +51,8 @@ function Navbar() {
             </Link>
           </li>
           <li>
-            <Link to="/todos" className={getLinkClasses('/todos')}>
-              To-Do's
+            <Link to="/plan" className={getLinkClasses('/plan')}>
+              Plan
             </Link>
           </li>
           <li>
