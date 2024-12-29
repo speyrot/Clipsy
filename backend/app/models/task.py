@@ -21,7 +21,7 @@ from .base import Base
 # 1. Define an enum for TaskStatus
 # --------------------------------------------------------------------
 class TaskStatus(enum.Enum):
-    idea = "idea"
+    unassigned = "unassigned"
     todo = "todo"
     in_progress = "in_progress"
     done = "done"
