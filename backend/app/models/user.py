@@ -35,3 +35,4 @@ class User(Base):
     # Relationship to tasks & tags
     tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
     tags = relationship("Tag", back_populates="user", cascade="all, delete-orphan")
+    

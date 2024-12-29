@@ -18,3 +18,4 @@ def get_my_profile(current_user: User = Depends(get_current_user)):
         "subscription_plan": current_user.subscription_plan.value,
         "token_balance": current_user.token_balance
     }
+
