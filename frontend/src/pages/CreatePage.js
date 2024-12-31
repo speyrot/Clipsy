@@ -1,163 +1,558 @@
 // frontend/src/pages/CreatePage.js
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import axios from 'axios';
+import { EllipsisVerticalIcon, CheckCircleIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/solid';
+import { Toaster, toast } from 'react-hot-toast';
 import UploadComponent from '../components/UploadComponent';
-import VideoPlayer from '../components/VideoPlayer';
 import VideoProcessingStatus from '../components/VideoProcessingStatus';
 import ProcessingIndicator from '../components/ProcessingIndicator';
+import VideoPreviewModal from '../components/VideoPreviewModal';
 
 function CreatePage() {
-  const [videoId, setVideoId] = useState(null);
-  const [processedVideoPath, setProcessedVideoPath] = useState(null);
-  const [processingJobId, setProcessingJobId] = useState(null);
+  // Existing state for selection and configuration
+  const [selectedVideos, setSelectedVideos] = useState(new Set());
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [videoConfigs, setVideoConfigs] = useState({});
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const MAX_SELECTIONS = 3;
 
+  // New state for two-step flow
+  const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [videoId, setVideoId] = useState(null);
+  const [processingJobId, setProcessingJobId] = useState(null);
+  const [processedVideoPath, setProcessedVideoPath] = useState(null);
+  const [processedVideos, setProcessedVideos] = useState([]);
+  const [processingJobs, setProcessingJobs] = useState(new Map()); // Track multiple jobs
+  const [previewVideo, setPreviewVideo] = useState(null);
+
+  // Handle upload completion from UploadComponent
   const handleUploadComplete = (uploadedData) => {
-    console.log('Upload Complete:', uploadedData);
-    setVideoId(uploadedData.video_id);
-    setProcessingJobId(uploadedData.job_id);
+    const newVideo = {
+      id: uploadedData.video_id,
+      s3Url: uploadedData.s3_url,
+      filename: uploadedData.filename,
+      thumbnail: '/placeholder-thumbnail.jpg',
+    };
+    setUploadedVideos(prev => [...prev, newVideo]);
   };
 
-  const handleProcessingComplete = (path) => {
-    console.log('Processing complete:', path);
-    setProcessedVideoPath(path);
+  // Handle processing completion
+  const handleProcessingComplete = useCallback((videoId, processedPath) => {
+    // Find the video that was being processed
+    const processedVideo = uploadedVideos.find(v => v.id === videoId);
+    
+    if (processedVideo) {
+      // Check if this video is already in processedVideos
+      const alreadyProcessed = processedVideos.some(v => v.id === videoId);
+      
+      if (!alreadyProcessed) {
+        const newProcessedVideo = {
+          ...processedVideo,
+          processedUrl: processedPath,
+          filename: `Processed_${processedVideo.filename}`
+        };
+        
+        setProcessedVideos(prev => [...prev, newProcessedVideo]);
+        
+        // Show success toast
+        toast.success('Video processing completed!', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        
+        // Remove the job from processing jobs
+        setProcessingJobs(prev => {
+          const newJobs = new Map(prev);
+          newJobs.delete(videoId);
+          return newJobs;
+        });
+      }
+    }
+  }, [uploadedVideos, processedVideos]);
+
+  // Handle individual video processing
+  const handleProcessVideo = async (video) => {
+    try {
+      const response = await axios.post("http://127.0.0.1:8000/process_video_simple", {
+        video_id: video.id,
+      });
+      
+      setVideoId(video.id);
+      setProcessingJobId(response.data.job_id);
+      setProcessedVideoPath(null);
+      
+      // Add processing toast and store its ID
+      const toastId = toast.loading('Processing video...', {
+        duration: Infinity, // Toast will remain until dismissed
+        position: 'bottom-right',
+      });
+      
+      // Store the toast ID in localStorage to be able to dismiss it later
+      localStorage.setItem(`processing_toast_${response.data.job_id}`, toastId);
+      
+      // Add the job to processing jobs
+      setProcessingJobs(prev => {
+        const newJobs = new Map(prev);
+        newJobs.set(video.id, response.data.job_id);
+        return newJobs;
+      });
+      
+      // Clear the selected videos immediately after processing starts
+      setSelectedVideos(new Set());
+      setShowConfigModal(false);
+      
+    } catch (error) {
+      console.error("Error processing video:", error);
+      toast.error("Failed to process video");
+    }
+  };
+
+  // Existing handlers
+  const toggleVideoSelection = (videoId) => {
+    setSelectedVideos(prev => {
+      const newSelection = new Set(prev);
+      if (newSelection.has(videoId)) {
+        newSelection.delete(videoId);
+      } else if (newSelection.size < MAX_SELECTIONS) {
+        newSelection.add(videoId);
+      } else if (!newSelection.has(videoId)) {
+        toast.error('You can only select up to 3 videos at once', {
+          duration: 2000,
+          position: 'bottom-center',
+          style: {
+            background: '#F9FAFB',
+            color: '#1F2937',
+            border: '1px solid #E5E7EB',
+            padding: '16px',
+            borderRadius: '8px',
+          },
+          id: 'max-selection',
+        });
+      }
+      return newSelection;
+    });
+  };
+
+  const handleDropdownClick = (e, id) => {
+    e.stopPropagation();
+    setActiveDropdown(activeDropdown === id ? null : id);
+  };
+
+  const handleActionClick = (e, action, video) => {
+    e.stopPropagation();
+    setActiveDropdown(null);
+    
+    switch(action) {
+      case 'rename':
+        console.log('Rename:', video.filename);
+        break;
+      case 'delete':
+        console.log('Delete:', video.filename);
+        break;
+      case 'download':
+        console.log('Download:', video.filename);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const VideoCard = ({ video, type, onVideoClick }) => {
+    const isSelected = type === 'upload' ? selectedVideos.has(video.id) : false;
+    const isUpload = type === 'upload';
+    const atMaxSelections = selectedVideos.size >= MAX_SELECTIONS;
+
+    return (
+      <div 
+        onClick={() => isUpload && toggleVideoSelection(video.id)}
+        className={`
+          flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden 
+          transition-all duration-200 relative group
+          ${isUpload ? 'cursor-pointer hover:bg-black/5' : ''}
+          ${isSelected ? 'border-purple-500 bg-black/5' : 'hover:border-gray-300'}
+          ${isUpload && atMaxSelections && !isSelected ? 'cursor-not-allowed opacity-50' : ''}
+        `}
+      >
+        {/* Checkmark - Only show for upload section */}
+        {isUpload && (
+          <div className="absolute top-2 right-2 z-10 transition-all duration-200">
+            {isSelected ? (
+              <CheckCircleIcon className="w-6 h-6 text-purple-500" />
+            ) : (
+              <div className={`
+                w-5 h-5 rounded-full border-2 border-gray-400/70 
+                opacity-0 group-hover:opacity-100 bg-white/50
+                ${atMaxSelections ? 'hidden' : ''}
+              `} />
+            )}
+          </div>
+        )}
+
+        <div className="aspect-video bg-gray-100">
+          <img 
+            src={video.thumbnail} 
+            alt="Video thumbnail" 
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="px-3 py-2 flex items-center justify-between">
+          <p className="text-sm text-gray-600 truncate flex-1" title={video.filename}>
+            {video.filename}
+          </p>
+          <div className="relative flex items-center">
+            {/* Eye Icon for Preview */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent selection toggle
+                handleVideoPreview(video);
+              }}
+              className="p-1 hover:bg-gray-100 rounded mr-1"
+            >
+              <EyeIcon className="w-5 h-5 text-gray-600 hover:text-purple-600" />
+            </button>
+            
+            {/* Ellipsis Menu Button */}
+            <button 
+              onClick={(e) => handleDropdownClick(e, `${type}-${video.id}`)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <EllipsisVerticalIcon className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            {/* Dropdown Menu */}
+            {activeDropdown === `${type}-${video.id}` && (
+              <div className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                <button
+                  onClick={(e) => handleActionClick(e, 'rename', video)}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Rename
+                </button>
+                <button
+                  onClick={(e) => handleActionClick(e, 'download', video)}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Download
+                </button>
+                <button
+                  onClick={(e) => handleActionClick(e, 'delete', video)}
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Dummy caption styles for the demo
+  const captionStyles = [
+    { id: 1, name: 'Modern Clean', thumbnail: '/caption-style1.jpg' },
+    { id: 2, name: 'Gaming Bold', thumbnail: '/caption-style2.jpg' },
+    { id: 3, name: 'Minimal', thumbnail: '/caption-style3.jpg' },
+    { id: 4, name: 'Subtitles', thumbnail: '/caption-style4.jpg' },
+  ];
+
+  const resolutionOptions = [
+    { value: '1080p', label: '1080p Full HD' },
+    { value: '720p', label: '720p HD' },
+    { value: '480p', label: '480p SD' },
+  ];
+
+  const handleConfigSave = async (videoId, config) => {
+    setVideoConfigs(prev => ({
+      ...prev,
+      [videoId]: config
+    }));
+
+    // If this is the last video, process all selected videos
+    if (currentVideoIndex === selectedVideos.size - 1) {
+      setShowConfigModal(false);
+      
+      // Get array of selected video IDs
+      const selectedVideoIds = Array.from(selectedVideos);
+      
+      // Process each selected video
+      for (const videoId of selectedVideoIds) {
+        const video = uploadedVideos.find(v => v.id === videoId);
+        if (video) {
+          await handleProcessVideo(video);
+        }
+      }
+      
+      // Clear selections after all videos are processed
+      setSelectedVideos(new Set());
+      setCurrentVideoIndex(0);
+    } else {
+      // Move to next video
+      setCurrentVideoIndex(prev => prev + 1);
+    }
+  };
+
+  const ConfigurationModal = ({ onClose, onSave, selectedVideos, currentVideoIndex, videoConfigs }) => {
+    const selectedVideoIds = Array.from(selectedVideos);
+    const currentVideo = uploadedVideos.find(v => v.id === selectedVideoIds[currentVideoIndex]);
+    
+    // Initialize config with current video's data
+    const [config, setConfig] = useState({
+      filename: currentVideo?.filename || '',
+      resolution: '1080p',
+      autoCaptions: false,
+      captionStyle: null
+    });
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-6 border-b">
+            <h3 className="text-xl font-semibold">
+              Configure Video {currentVideoIndex + 1} of {selectedVideos.size}
+            </h3>
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="p-6 space-y-6">
+            {/* Filename */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Output Filename
+              </label>
+              <input
+                type="text"
+                value={config.filename}
+                onChange={e => setConfig(prev => ({ ...prev, filename: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                disabled
+              />
+            </div>
+
+            {/* Resolution */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Resolution
+              </label>
+              <select
+                value={config.resolution}
+                onChange={e => setConfig(prev => ({ ...prev, resolution: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {resolutionOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Auto Captions with Toggle Switch */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-sm font-medium text-gray-700">
+                  Auto Captions
+                </label>
+                <button
+                  onClick={() => setConfig(prev => ({ ...prev, autoCaptions: !prev.autoCaptions }))}
+                  className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none"
+                  style={{ backgroundColor: config.autoCaptions ? '#9333EA' : '#E5E7EB' }}
+                >
+                  <span
+                    className={`
+                      inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200 shadow-sm
+                      ${config.autoCaptions ? 'translate-x-6' : 'translate-x-1'}
+                    `}
+                  />
+                </button>
+              </div>
+
+              {/* Caption Styles Carousel */}
+              {config.autoCaptions && (
+                <div className="overflow-x-auto">
+                  <div className="flex space-x-4 p-2">
+                    {captionStyles.map(style => (
+                      <div
+                        key={style.id}
+                        onClick={() => setConfig(prev => ({ ...prev, captionStyle: style.id }))}
+                        className={`
+                          flex-shrink-0 w-32 rounded-lg border-2 overflow-hidden cursor-pointer
+                          ${config.captionStyle === style.id 
+                            ? 'border-purple-500' 
+                            : 'border-gray-200'}
+                        `}
+                      >
+                        <div className="aspect-video bg-gray-100">
+                          {/* Placeholder for caption style preview */}
+                          <div className="w-full h-full flex items-center justify-center text-gray-500">
+                            Style {style.id}
+                          </div>
+                        </div>
+                        <div className="p-2 text-center text-sm">
+                          {style.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+            <button
+              onClick={() => setCurrentVideoIndex(prev => Math.max(0, prev - 1))}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              disabled={currentVideoIndex === 0}
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => onSave(currentVideo.id, config)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            >
+              {currentVideoIndex === selectedVideos.size - 1 
+                ? `Process ${selectedVideos.size} Clips`
+                : 'Next'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add handler for video preview
+  const handleVideoPreview = (video) => {
+    setPreviewVideo(video);
   };
 
   return (
-    <div className="px-8 py-6">
-      {/* Heading */}
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Create</h1>
+    <>
+      <div className="px-8 py-6">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Video Hub</h1>
 
-      {/* Upload Section */}
-      {!videoId && (
-        <div className="bg-gray-100 border border-gray-200 rounded-2xl shadow-xl p-12 space-y-8">
-          <h2 className="text-2xl font-bold text-gray-800 text-center">
-            Upload and Process Your Video
-          </h2>
-          <p className="text-gray-600 text-center text-md max-w-lg mx-auto">
-            Upload a video file to get started. We will process it for you and
-            return a playable version.
-          </p>
-          <UploadComponent onUploadComplete={handleUploadComplete} />
-        </div>
-      )}
-
-      {/* Processing Status Section */}
-      {processingJobId && !processedVideoPath && (
-        <div className="bg-white rounded-2xl shadow-xl p-12 mt-8 flex flex-col items-center space-y-6">
-          <ProcessingIndicator />
-          <VideoProcessingStatus
-            jobId={processingJobId}
-            videoId={videoId}
-            onProcessingComplete={handleProcessingComplete}
-          />
-        </div>
-      )}
-
-      {/* Video Player and Form Section */}
-      {processedVideoPath && (
-        <div className="bg-white rounded-2xl shadow-xl p-12 mt-8">
-          <div className="flex flex-col lg:flex-row gap-12">
-            {/* Left Column - Form */}
-            <div className="w-full lg:w-1/2 space-y-6">
-              {/* Row 1: Video Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Video Name:
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Enter video name"
-                />
-              </div>
-
-              {/* Row 2: Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description:
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Enter video description"
-                />
-              </div>
-
-              {/* Row 3: Resolution and Auto Captions */}
-              <div className="flex flex-col sm:flex-row sm:space-x-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Resolution
-                  </label>
-                  <select className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                    <option>1080p</option>
-                    <option>720p</option>
-                    <option>480p</option>
-                  </select>
-                </div>
-                <div className="flex items-center mt-4 sm:mt-0">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">
-                    Auto Captions
-                  </span>
-                </div>
-              </div>
-
-              {/* Row 4: Add a Cover */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add a Cover
-                </label>
-                <div className="flex items-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="file-input w-full px-4 py-3 border border-gray-300 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Row 5: Share to Socials */}
-              <div>
-                <button className="w-full bg-purple-600 text-white px-4 py-3 rounded-lg shadow-lg hover:bg-purple-700 transition duration-200 flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M8 12h.01M12 12h.01M16 12h.01M20 12a8 8 0 11-16 0 8 8 0 0116 0z"
-                    />
-                  </svg>
-                  Share to Socials
-                </button>
-              </div>
-
-              {/* Row 6: Try Again and Save */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-lg shadow-lg hover:bg-gray-300 transition duration-200">
-                  Try Again
-                </button>
-                <button className="flex-1 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg hover:bg-green-700 transition duration-200">
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Right Column - Video Player */}
-            <div className="w-full lg:w-1/2 flex justify-center">
-              <VideoPlayer videoUrl={processedVideoPath} />
+        {/* Uploads Section */}
+        <section className="mb-12">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-800">Uploads</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">
+                {selectedVideos.size}/{MAX_SELECTIONS} selected
+              </span>
+              <button 
+                onClick={() => {
+                  if (selectedVideos.size > 0) {
+                    setCurrentVideoIndex(0);
+                    setShowConfigModal(true);
+                  }
+                }}
+                className={`
+                  px-4 py-2 rounded-lg transition-all duration-200
+                  ${selectedVideos.size > 0 
+                    ? 'bg-purple-600 text-white hover:bg-purple-700 cursor-pointer' 
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+                `}
+                disabled={selectedVideos.size === 0}
+              >
+                Process {selectedVideos.size > 0 && `(${selectedVideos.size})`}
+              </button>
             </div>
           </div>
-        </div>
+          
+          <div className="relative">
+            <div className="overflow-x-auto flex space-x-4 p-4">
+              <UploadComponent onUploadComplete={handleUploadComplete} />
+              
+              {/* Uploaded Video Tiles with click handler */}
+              {uploadedVideos.map(video => (
+                <VideoCard 
+                  key={video.id} 
+                  video={video} 
+                  type="upload"
+                  onVideoClick={() => handleVideoPreview(video)}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Post Production Videos Section */}
+        <section>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-800">Post Production</h2>
+            <div className="flex space-x-2">
+              <select className="border rounded-lg px-3 py-2 text-sm text-gray-600">
+                <option>All Videos</option>
+                <option>Recent</option>
+                <option>Processing</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="overflow-x-auto flex space-x-4 p-4">
+              {processedVideos.length === 0 ? (
+                <div className="flex-shrink-0 w-full rounded-lg border border-gray-200 p-8 text-center">
+                  <p className="text-gray-500">No processed videos yet</p>
+                </div>
+              ) : (
+                processedVideos.map(video => (
+                  <VideoCard 
+                    key={video.id} 
+                    video={video} 
+                    type="processed"
+                    onVideoClick={() => handleVideoPreview(video)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+      
+      {showConfigModal && (
+        <ConfigurationModal 
+          onClose={() => {
+            setShowConfigModal(false);
+            setSelectedVideos(new Set()); // Clear selections when modal is closed
+            setCurrentVideoIndex(0);
+          }}
+          onSave={handleConfigSave}
+          selectedVideos={Array.from(selectedVideos)}
+          currentVideoIndex={currentVideoIndex}
+          videoConfigs={videoConfigs}
+        />
       )}
-    </div>
+      
+      {/* Render processing status components for active jobs */}
+      {Array.from(processingJobs.entries()).map(([vid_id, job_id]) => (
+        <VideoProcessingStatus
+          key={`${job_id}-${vid_id}`}
+          jobId={job_id}
+          videoId={vid_id}
+          onProcessingComplete={(processedPath) => handleProcessingComplete(vid_id, processedPath)}
+        />
+      ))}
+      
+      {/* Video Preview Modal */}
+      {previewVideo && (
+        <VideoPreviewModal
+          video={previewVideo}
+          onClose={() => setPreviewVideo(null)}
+        />
+      )}
+      
+      <Toaster />
+    </>
   );
 }
 

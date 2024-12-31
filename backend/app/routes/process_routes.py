@@ -53,3 +53,26 @@ async def process_video_endpoint(request: ProcessRequest, db: Session = Depends(
         raise HTTPException(status_code=500, detail=f"Error initiating video processing: {str(e)}")
     
     return {"job_id": processing_job.id}
+
+
+class SimpleProcessRequest(BaseModel):
+    video_id: int
+
+@router.post("/process_video_simple")
+async def process_video_simple(req: SimpleProcessRequest, db: Session = Depends(get_db)):
+    video = db.query(Video).filter(Video.id == req.video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    processing_job = ProcessingJob(
+        video_id=video.id,
+        status=JobStatus.pending,
+        progress=0.0,
+        job_type=JobType.video_processing
+    )
+    db.add(processing_job)
+    db.commit()
+    db.refresh(processing_job)
+
+    process_video_task.delay(video.id, processing_job.id)
+    return {"job_id": processing_job.id}

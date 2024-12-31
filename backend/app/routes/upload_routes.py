@@ -128,3 +128,46 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
         content={"video_id": video.id, "job_id": processing_job.id},
         status_code=201
     )
+
+@router.post("/upload_only", summary="Upload a video without processing")
+async def upload_only(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    local_file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    
+    logger.info(f"(UploadOnly) Starting upload for {file.filename}, will save as {unique_filename}")
+
+    # 1. Save file locally
+    content = await file.read()
+    with open(local_file_path, "wb") as buffer:
+        buffer.write(content)
+    logger.info(f"(UploadOnly) Saved file to {local_file_path}")
+
+    # 2. Convert to CFR
+    try:
+        cfr_local_path = convert_to_cfr(local_file_path)
+    except Exception as e:
+        logger.error(f"(UploadOnly) Error converting to CFR: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to convert video to CFR.")
+
+    # 3. Upload CFR file to S3
+    s3_key_cfr = f"videos/{unique_filename}_cfr.mp4"
+    s3_url_cfr = upload_file_to_s3(cfr_local_path, s3_key_cfr)
+    logger.info(f"(UploadOnly) Uploaded CFR to S3: {s3_url_cfr}")
+
+    # 4. Create Video record in DB with status=uploaded
+    video = Video(
+        upload_path=s3_url_cfr,
+        status=VideoStatus.uploaded
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+    logger.info(f"(UploadOnly) Created Video record ID={video.id}")
+
+    # (Optional) Clean up local files
+    delete_local_file(local_file_path)
+    delete_local_file(cfr_local_path)
+
+    # 5. Return the video_id and S3 URL
+    return {"video_id": video.id, "s3_url": s3_url_cfr}
