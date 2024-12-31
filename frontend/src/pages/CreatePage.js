@@ -1,11 +1,11 @@
-// frontend/src/pages/ProcessPage.js
+// frontend/src/pages/CreatePage.js
 import React, { useState } from 'react';
 import UploadComponent from '../components/UploadComponent';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoProcessingStatus from '../components/VideoProcessingStatus';
 import ProcessingIndicator from '../components/ProcessingIndicator';
 
-function ProcessPage() {
+function CreatePage() {
   const [videoId, setVideoId] = useState(null);
   const [processedVideoPath, setProcessedVideoPath] = useState(null);
   const [processingJobId, setProcessingJobId] = useState(null);
@@ -161,4 +161,4 @@ function ProcessPage() {
   );
 }
 
-export default ProcessPage;
+export default CreatePage;

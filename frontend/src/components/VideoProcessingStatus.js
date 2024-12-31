@@ -20,8 +20,7 @@ const VideoProcessingStatus = ({ jobId, videoId, onProcessingComplete }) => {
         if (status === 'completed' && processed_video_path) {
           console.log("Video processing completed, path:", processed_video_path);
           clearInterval(pollingInterval.current);
-          const filename = processed_video_path.split('/').pop();
-          onProcessingComplete(filename);
+          onProcessingComplete(processed_video_path);
         }
       } catch (error) {
         console.error("Error checking video processing status:", error);

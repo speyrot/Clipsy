@@ -10,10 +10,11 @@ from app.config import settings
 from app.database import get_db
 from app.models import Video, ProcessingJob, VideoStatus, JobStatus, JobType
 from app.services.video_processing import process_video_task
+# NEW IMPORTS for S3
+from app.utils.s3_utils import upload_file_to_s3, delete_local_file
 import logging
 
 router = APIRouter()
-
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.path.join(settings.BASE_DIR, "uploads")
@@ -36,13 +37,10 @@ def run_ffprobe(video_path: str, label: str = ""):
 def convert_to_cfr(input_path: str) -> str:
     """
     Convert the uploaded video to a constant frame rate (CFR) version.
-    We'll choose a standard frame rate like 30 fps, or read from ffprobe if needed.
-    For simplicity, let's pick 30 fps.
     """
     base, ext = os.path.splitext(input_path)
     cfr_path = base + "_cfr.mp4"
 
-    # Choose a CFR frame rate. 30 is a common standard. You could also use 29.97.
     desired_fps = "30"
 
     cmd = [
@@ -64,45 +62,49 @@ def convert_to_cfr(input_path: str) -> str:
 async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_db)):
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    local_file_path = os.path.join(UPLOAD_DIR, unique_filename)
     
     logger.info(f"Starting upload for {file.filename}, will save as {unique_filename}")
 
+    # 1. Save the uploaded file locally
     content = await file.read()
-    size = len(content)
-    logger.info(f"Read {size} bytes from uploaded file {file.filename}")
-
-    with open(file_path, "wb") as buffer:
+    with open(local_file_path, "wb") as buffer:
         buffer.write(content)
-    
-    disk_size = os.path.getsize(file_path)
-    logger.info(f"Wrote {disk_size} bytes to {file_path}")
-    if disk_size != size:
-        logger.warning(f"Disk size ({disk_size}) does not match read size ({size})")
+    logger.info(f"Saved uploaded file to {local_file_path}")
 
-    # Check original file details
-    run_ffprobe(file_path, label="after upload")
+    # 2. Check original file details (optional)
+    run_ffprobe(local_file_path, label="after upload")
 
-    # Convert to CFR
+    # 3. Convert to CFR
     try:
-        cfr_path = convert_to_cfr(file_path)
+        cfr_local_path = convert_to_cfr(local_file_path)
     except Exception as e:
         logger.error(f"Error converting video to CFR: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to convert video to constant frame rate.")
+    logger.info(f"CFR conversion complete: {cfr_local_path}")
 
-    # Run ffprobe on CFR file
-    run_ffprobe(cfr_path, label="after CFR conversion")
+    run_ffprobe(cfr_local_path, label="after CFR conversion")
 
-    # Create video entry
+    # 4. Upload the CFR file to S3
+    s3_key_cfr = f"videos/{unique_filename}_cfr.mp4"
+    s3_url_cfr = upload_file_to_s3(cfr_local_path, s3_key_cfr)
+    logger.info(f"Uploaded CFR file to S3 at key: {s3_key_cfr}. URL: {s3_url_cfr}")
+
+    # (Optional) upload the original if desired
+    # s3_key_original = f"videos/{unique_filename}_original{file_extension}"
+    # s3_url_original = upload_file_to_s3(local_file_path, s3_key_original)
+
+    # 5. Create the Video entry in DB
     video = Video(
-        upload_path=cfr_path,
+        upload_path=s3_url_cfr,  # store S3 URL as the upload_path
         status=VideoStatus.uploaded
     )
     db.add(video)
     db.commit()
     db.refresh(video)
+    logger.info(f"Created Video record ID={video.id} with upload_path={s3_url_cfr}")
 
-    # Create processing job directly for video processing
+    # 6. Create a ProcessingJob
     processing_job = ProcessingJob(
         video_id=video.id,
         status=JobStatus.pending,
@@ -112,43 +114,17 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
     db.add(processing_job)
     db.commit()
     db.refresh(processing_job)
+    logger.info(f"Created ProcessingJob ID={processing_job.id} for video ID={video.id}")
 
-    # Trigger video processing directly
+    # 7. Trigger Celery task
     process_video_task.delay(video.id, processing_job.id)
-    logger.info(f"Video processing task triggered for video ID {video.id}")
+    logger.info(f"process_video_task triggered for video ID={video.id}, job ID={processing_job.id}")
+
+    # 8. Optionally delete local files
+    delete_local_file(local_file_path)
+    delete_local_file(cfr_local_path)
 
     return JSONResponse(
         content={"video_id": video.id, "job_id": processing_job.id},
         status_code=201
     )
-
-@router.get("/processing_status/{video_id}", summary="Check the processing status of a video")
-async def check_processing_status(video_id: int, db: Session = Depends(get_db)):
-    video = db.query(Video).filter(Video.id == video_id).first()
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    db.refresh(video)
-
-    processing_jobs = db.query(ProcessingJob).filter(ProcessingJob.video_id == video_id).all()
-    if not processing_jobs:
-        raise HTTPException(status_code=404, detail="Processing jobs not found")
-
-    jobs_status = []
-    for job in processing_jobs:
-        db.refresh(job)
-        job_info = {
-            "job_id": job.id,
-            "job_type": job.job_type.value,
-            "status": job.status.value,
-            "progress": job.progress
-        }
-        jobs_status.append(job_info)
-
-    logger.info(f"Video status check for ID {video_id}: {video.status.value}, Jobs status: {jobs_status}")
-    response = JSONResponse(content={
-        "video_status": video.status.value,
-        "jobs_status": jobs_status
-    }, status_code=200)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return response

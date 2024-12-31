@@ -6,7 +6,7 @@ from moviepy.editor import VideoFileClip
 from app.celery_app import celery
 from app.models import ProcessingJob, JobStatus, Speaker, VideoStatus, Video, JobType
 from app.database import SessionLocal
-from app.services.face_detection import detect_and_store_speakers, load_face_detector, scaler, pca
+from app.services.face_detection import detect_and_store_speakers, load_face_detector
 from app.services.scene_detection import detect_scenes
 from app.utils.video_utils import extract_frames, apply_layout_to_frame, compile_video_with_audio, determine_layout, ffprobe_info
 import logging
@@ -19,6 +19,16 @@ import os
 import subprocess
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+import uuid
+
+# NEW IMPORTS for S3 handling
+from app.utils.s3_utils import (
+    download_s3_to_local,
+    upload_file_to_s3,
+    delete_local_file
+)
+
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +75,23 @@ def process_video_task(video_id: int, job_id: int):
             if not job:
                 raise ValueError(f"No ProcessingJob found with ID: {job_id}")
 
+            # Mark job as in_progress
             job.status = JobStatus.in_progress
             job.video.status = VideoStatus.processing
             db.commit()
 
-            # Use the original uploaded video file
-            original_video_path = job.video.upload_path
-            logger.info(f"Process video using original file at: {original_video_path}")
+            # This is the S3 URL we stored in upload_path
+            s3_url_cfr = job.video.upload_path
+            logger.info(f"Will download S3 URL for video: {s3_url_cfr}")
 
-            # Run ffprobe to get exact fps info
+            # 1. Download from S3 to local temp directory
+            local_temp_dir = tempfile.mkdtemp()
+            local_cfr_path = os.path.join(local_temp_dir, "input_cfr.mp4")
+            download_s3_to_local(s3_url_cfr, local_cfr_path)
+
+            logger.info(f"Downloaded CFR video to {local_cfr_path}, proceeding with processing...")
+
+            # 2. Gather fps info
             def get_video_info(path: str):
                 cmd = [
                     "ffprobe", "-v", "error", "-select_streams", "v:0", 
@@ -90,45 +108,42 @@ def process_video_task(video_id: int, job_id: int):
                         nb_frames = float(line.split('=')[1].strip())
                 return duration, nb_frames
 
-            duration, nb_frames = get_video_info(original_video_path)
+            duration, nb_frames = get_video_info(local_cfr_path)
             if duration is None or nb_frames is None:
                 logger.warning("Could not retrieve duration or nb_frames from ffprobe. Falling back to MoviePy fps.")
-                clip = VideoFileClip(original_video_path)
+                clip = VideoFileClip(local_cfr_path)
                 fps = clip.fps
                 clip.close()
-
-                logger.info(f"Using original nominal FPS from MoviePy: {fps} FPS for final output")
+                logger.info(f"Using fps from MoviePy: {fps} FPS")
             else:
                 fps = nb_frames / duration
-                logger.info(f"Calculated FPS from ffprobe: {fps:.4f} (nb_frames={nb_frames}, duration={duration:.2f}s)")
+                logger.info(f"Calculated FPS from ffprobe: {fps:.4f}")
 
-            # Initialize face detector BEFORE the scene processing
+            # Initialize face detector
             face_detector = load_face_detector()
-            logger.info("Face detector initialized")
+            logger.info("Face detector initialized.")
 
             # Detect scenes
-            scene_timestamps = detect_scenes(job.video_id, original_video_path, db)
+            scene_timestamps = detect_scenes(job.video_id, local_cfr_path, db)
             if not scene_timestamps:
-                # If no scenes detected, treat the entire video as one scene
-                logger.info("No scenes detected. Treating entire video as one scene.")
+                logger.info("No scenes detected. Entire video is one scene.")
                 if duration is None:
-                    clip = VideoFileClip(original_video_path)
+                    clip = VideoFileClip(local_cfr_path)
                     duration = clip.duration
                     clip.close()
                 scene_timestamps = [(0, duration)]
 
-            # Use frame_skip=1 for final processing
-            frames = extract_frames(original_video_path, frame_skip=1)
+            # Extract frames (frame_skip=1)
+            frames = extract_frames(local_cfr_path, frame_skip=1)
             total_frames = len(frames)
             if total_frames == 0:
-                raise ValueError("No frames extracted from the original video. Cannot process.")
+                raise ValueError("No frames extracted from the CFR video.")
 
-            logger.info(f"Extracted {len(frames)} frames (no skipping) from {original_video_path} for final processing.")
+            logger.info(f"Extracted {total_frames} frames from {local_cfr_path}.")
 
-            # Test the face detector with a sample frame
-            test_frame = frames[0]  # Use the first frame as a test
-            test_detections = face_detector.get(test_frame)
-            logger.info(f"Face detector test: found {len(test_detections) if test_detections is not None else 0} faces in test frame")
+            # Quick face detector test
+            test_detections = face_detector.get(frames[0])
+            logger.info(f"Face detector test found {len(test_detections) if test_detections else 0} faces in the first frame.")
 
             def identify_speakers_in_frame_runtime(frame: np.ndarray, speaker_data: list, face_detector, video_id: int, db: Session) -> list:
                 logger.info("Starting face detection...")
@@ -180,14 +195,10 @@ def process_video_task(video_id: int, job_id: int):
             for (start_time, end_time) in scene_timestamps:
                 start_f = int(start_time * fps)
                 end_f = min(int(end_time * fps), total_frames - 1)
-
                 rep_frame_idx = max(0, min(start_f, total_frames - 1))
                 rep_frame = frames[rep_frame_idx]
-
-                # Debug logging for speaker identification
                 logger.info(f"Processing scene from {start_time:.2f}s to {end_time:.2f}s")
 
-                # Identify speakers in the representative frame
                 identified = identify_speakers_in_frame_runtime(
                     frame=rep_frame,
                     speaker_data=[],
@@ -195,43 +206,45 @@ def process_video_task(video_id: int, job_id: int):
                     video_id=job.video_id,
                     db=db
                 )
-                logger.info(f"All identified speakers in frame: {[uid for uid, _ in identified]}")
-
                 layout_config = determine_layout(len(identified))
-                logger.info(f"Using layout config for {len(identified)} speakers")
 
-                # Process all frames in the scene
                 for f_idx in range(start_f, end_f + 1):
                     if 0 <= f_idx < total_frames:
-                        frame = frames[f_idx]
-                        out_frame = apply_layout_to_frame(frame, identified, layout_config)
+                        out_frame = apply_layout_to_frame(frames[f_idx], identified, layout_config)
                         if out_frame is not None:
                             processed_frames.append(out_frame)
-                        else:
-                            logger.warning(f"Frame {f_idx} returned None after layout application")
 
                 progress = ((end_f + 1) / total_frames) * 100 if total_frames > 0 else 100
                 job.progress = progress
                 db.commit()
 
             if not processed_frames:
-                logger.error("No frames were processed. Cannot compile final video.")
-                raise ValueError("No processed frames.")
+                logger.error("No processed frames, cannot compile final video.")
+                raise ValueError("No processed frames to compile.")
 
-            logger.info(f"Compiling final video with {len(processed_frames)} frames.")
-            logger.info(f"Using fps={fps:.4f} for final compilation from ffprobe info.")
+            logger.info(f"Compiling final video with {len(processed_frames)} frames, fps={fps:.2f}")
 
-            compiled_video_path = compile_video_with_audio(original_video_path, processed_frames, fps=fps)
-            if not compiled_video_path:
+            local_processed_path = compile_video_with_audio(local_cfr_path, processed_frames, fps=fps)
+            if not local_processed_path:
                 raise ValueError("Failed to compile the processed video.")
 
-            job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
+            # 3. Upload the final processed file to S3
+            processed_filename = f"{uuid.uuid4()}_cfr_processed.mp4"
+            s3_key_processed = f"videos/{processed_filename}"
+            s3_url_processed = upload_file_to_s3(local_processed_path, s3_key_processed)
+            logger.info(f"Uploaded final processed video to S3: {s3_url_processed}")
+
+            # Update DB with final URLs
             job.video.status = VideoStatus.completed
             job.status = JobStatus.completed
-            job.processed_video_path = compiled_video_path
+            job.processed_video_path = s3_url_processed  # store final S3 URL
             db.commit()
 
-            logger.info(f"Video status updated to completed, final video: {compiled_video_path}")
+            logger.info(f"Video ID {video_id} marked completed. processed_video_path = {s3_url_processed}")
+
+            # Clean up local
+            delete_local_file(local_cfr_path)
+            delete_local_file(local_processed_path)
 
         except Exception as e:
             logger.error(f"Error in process_video_task for job ID {job_id}: {e}", exc_info=True)

@@ -12,20 +12,32 @@ const formatTime = (timeInSeconds) => {
 };
 
 const VideoPlayer = ({ videoUrl }) => {
+  // --------------------------------------------------------
+  // 1. Local State
+  // --------------------------------------------------------
   const videoRef = useRef(null);
+  const progressBarRef = useRef(null);
 
+  // Is the user scrubbing the timeline?
+  const [isScrubbing, setIsScrubbing] = useState(false);
+
+  // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+
+  // Some UI toggles
   const [resolution, setResolution] = useState('480p');
   const [autoCaptions, setAutoCaptions] = useState(false);
 
-  const progressBarRef = useRef(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
-
+  // --------------------------------------------------------
+  // 3. Event Handlers for Video
+  // --------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
+
+    if (!video) return;
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
@@ -41,23 +53,21 @@ const VideoPlayer = ({ videoUrl }) => {
       setIsPlaying(false);
     };
 
-    if (video) {
-      video.addEventListener('loadedmetadata', handleLoadedMetadata);
-      video.addEventListener('timeupdate', handleTimeUpdate);
-      video.addEventListener('ended', handleEnded);
-    }
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('ended', handleEnded);
 
     return () => {
-      if (video) {
-        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('ended', handleEnded);
-      }
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('ended', handleEnded);
     };
   }, [isScrubbing]);
 
   const handlePlayPause = () => {
     const video = videoRef.current;
+    if (!video) return;
+
     if (video.paused) {
       video.play();
       setIsPlaying(true);
@@ -69,6 +79,8 @@ const VideoPlayer = ({ videoUrl }) => {
 
   const handleRestart = () => {
     const video = videoRef.current;
+    if (!video) return;
+
     video.currentTime = 0;
     video.play();
     setIsPlaying(true);
@@ -76,21 +88,26 @@ const VideoPlayer = ({ videoUrl }) => {
 
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
-    videoRef.current.volume = newVolume;
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+    }
     setVolume(newVolume);
   };
 
+  // --------------------------------------------------------
+  // 4. Timeline Scrubbing
+  // --------------------------------------------------------
   const seekToTime = (time) => {
-    const video = videoRef.current;
-    video.currentTime = Math.min(time, duration);
-    setCurrentTime(video.currentTime);
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.min(time, duration);
+    setCurrentTime(videoRef.current.currentTime);
   };
 
   const getRatioFromEvent = (e) => {
     const rect = progressBarRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     let ratio = x / rect.width;
-    ratio = Math.min(Math.max(ratio, 0), 1);
+    ratio = Math.max(0, Math.min(ratio, 1));
     return ratio;
   };
 
@@ -126,12 +143,18 @@ const VideoPlayer = ({ videoUrl }) => {
     };
   }, [handleDocumentMouseMove, handleDocumentMouseUp]);
 
+  // --------------------------------------------------------
+  // 5. Derived values
+  // --------------------------------------------------------
   const progressPercentage = duration ? (currentTime / duration) * 100 : 0;
 
   const handleResolutionChange = (e) => {
     setResolution(e.target.value);
   };
 
+  // --------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------
   return (
     <div className="mx-auto max-w-xs w-full bg-white rounded-lg shadow-md overflow-hidden">
       {/* Video Container */}
@@ -142,12 +165,10 @@ const VideoPlayer = ({ videoUrl }) => {
             ref={videoRef}
             className="absolute inset-0 w-full h-full object-contain bg-black"
             preload="metadata"
+            src={videoUrl || undefined}
           >
-            <source
-              src={`http://127.0.0.1:8000/processed_video/${videoUrl}`}
-              type="video/mp4"
-            />
-            Your browser does not support the video tag.
+            {/* Fallback message */}
+            Sorry, your browser does not support embedded videos.
           </video>
         </div>
 
@@ -162,27 +183,27 @@ const VideoPlayer = ({ videoUrl }) => {
             <div
               className="absolute top-0 left-0 h-2 bg-purple-500 rounded transition-width duration-150"
               style={{ width: `${progressPercentage}%` }}
-            ></div>
-            {/* Thumb/Handle */}
+            />
             {!isNaN(progressPercentage) && (
               <div
-                className={`absolute top-0 h-2 w-2 bg-white rounded-full transform -translate-x-1/2
-                  ${isScrubbing ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity duration-200'}`}
+                className={`absolute top-0 h-2 w-2 bg-white rounded-full transform -translate-x-1/2 ${
+                  isScrubbing
+                    ? ''
+                    : 'opacity-0 group-hover:opacity-100 transition-opacity duration-200'
+                }`}
                 style={{ left: `${progressPercentage}%` }}
-              ></div>
+              />
             )}
           </div>
 
           {/* Time + Controls Row */}
           <div className="flex items-center justify-between text-sm">
-            {/* Current Time / Duration */}
             <div className="flex items-center space-x-1">
               <span>{formatTime(currentTime)}</span>
               <span>/</span>
               <span>{formatTime(duration)}</span>
             </div>
 
-            {/* Control Buttons */}
             <div className="flex items-center space-x-4">
               {/* Play/Pause */}
               <button
@@ -239,11 +260,13 @@ const VideoPlayer = ({ videoUrl }) => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1
-                      1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0
-                      01-1 1h-3m-6 0a1 1 0 001-1v-4a1
-                      1 0 011-1h2a1 1 0 011 1v4a1
-                      1 0 001 1m-6 0h6"
+                    d="M3 12l2-2m0 0l7-7 7 7M5
+                      10v10a1 1 0 001 1h3m10-11l2
+                      2m-2-2v10a1 1 0 01-1 1h-3m-6
+                      0a1 1 0 001-1v-4a1 1 0
+                      011-1h2a1 1 0 011
+                      1v4a1 1 0 001 1m-6
+                      0h6"
                   />
                 </svg>
               </button>
@@ -288,7 +311,7 @@ const VideoPlayer = ({ videoUrl }) => {
                 <option value="1080p">1080p</option>
               </select>
 
-              {/* Auto Caption Toggle */}
+              {/* Auto-Captions Toggle */}
               <div className="flex items-center space-x-2">
                 <Switch
                   checked={autoCaptions}
