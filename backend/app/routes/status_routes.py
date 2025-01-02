@@ -27,7 +27,7 @@ async def get_job_status(job_id: int, db: Session = Depends(get_db)):
         "job_type": job.job_type.value,
         "status": job.status.value,
         "progress": job.progress,
-        "processed_video_path": job.processed_video_path
+        "processed_video_path": job.video.processed_path
     })
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response

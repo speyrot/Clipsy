@@ -3,7 +3,10 @@
 import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 
-const VideoPreviewModal = ({ video, onClose }) => {
+const VideoPreviewModal = ({ video, type, onClose }) => {
+  // Use the type prop to determine which URL to use
+  const videoUrl = type === 'upload' ? video.upload_path : video.processed_path;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full">
@@ -12,10 +15,7 @@ const VideoPreviewModal = ({ video, onClose }) => {
           <h3 className="text-xl font-semibold text-gray-800">
             {video.filename}
           </h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-full"
-          >
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
             <XMarkIcon className="h-6 w-6 text-gray-500" />
           </button>
         </div>
@@ -27,7 +27,7 @@ const VideoPreviewModal = ({ video, onClose }) => {
               className="w-full h-full object-contain"
               controls
               autoPlay
-              src={video.processedUrl || video.s3Url}
+              src={videoUrl}
             >
               Your browser does not support the video tag.
             </video>
@@ -37,11 +37,11 @@ const VideoPreviewModal = ({ video, onClose }) => {
           <div className="mt-4 space-y-2">
             <p className="text-sm text-gray-600">
               <span className="font-medium">Type:</span>{' '}
-              {video.processedUrl ? 'Processed Video' : 'Original Upload'}
+              {type === 'upload' ? 'Original Upload' : 'Processed Video'}
             </p>
             <p className="text-sm text-gray-600">
               <span className="font-medium">URL:</span>{' '}
-              {video.processedUrl || video.s3Url}
+              {videoUrl}
             </p>
           </div>
         </div>
@@ -60,4 +60,4 @@ const VideoPreviewModal = ({ video, onClose }) => {
   );
 };
 
-export default VideoPreviewModal; 
+export default VideoPreviewModal;

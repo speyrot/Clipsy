@@ -88,7 +88,6 @@ def process_video_task(video_id: int, job_id: int):
             local_temp_dir = tempfile.mkdtemp()
             local_cfr_path = os.path.join(local_temp_dir, "input_cfr.mp4")
             download_s3_to_local(s3_url_cfr, local_cfr_path)
-
             logger.info(f"Downloaded CFR video to {local_cfr_path}, proceeding with processing...")
 
             # 2. Gather fps info
@@ -228,21 +227,21 @@ def process_video_task(video_id: int, job_id: int):
             if not local_processed_path:
                 raise ValueError("Failed to compile the processed video.")
 
-            # 3. Upload the final processed file to S3
+            # 3. After finishing, upload the final processed video
             processed_filename = f"{uuid.uuid4()}_cfr_processed.mp4"
             s3_key_processed = f"videos/{processed_filename}"
             s3_url_processed = upload_file_to_s3(local_processed_path, s3_key_processed)
             logger.info(f"Uploaded final processed video to S3: {s3_url_processed}")
 
-            # Update DB with final URLs
+            # 4. Store it in processed_path
+            job.video.processed_path = s3_url_processed  # store final S3 URL
             job.video.status = VideoStatus.completed
             job.status = JobStatus.completed
-            job.processed_video_path = s3_url_processed  # store final S3 URL
             db.commit()
 
             logger.info(f"Video ID {video_id} marked completed. processed_video_path = {s3_url_processed}")
 
-            # Clean up local
+            # Clean up
             delete_local_file(local_cfr_path)
             delete_local_file(local_processed_path)
 

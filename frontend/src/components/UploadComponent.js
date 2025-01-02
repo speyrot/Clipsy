@@ -11,6 +11,15 @@ const UploadComponent = ({ onUploadComplete }) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    // 1) Check for token
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      toast.error('No access token found. Please sign in first.', {
+        position: 'bottom-right',
+      });
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -21,9 +30,11 @@ const UploadComponent = ({ onUploadComplete }) => {
     try {
       setIsUploading(true);
 
+      // 2) Include Authorization header
       const response = await axios.post('http://127.0.0.1:8000/upload_only', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`, // <-- Bearer token here
         },
       });
 
@@ -31,12 +42,11 @@ const UploadComponent = ({ onUploadComplete }) => {
         onUploadComplete({
           video_id: response.data.video_id,
           s3_url: response.data.s3_url,
-          filename: response.data.s3_filename || file.name
+          filename: response.data.s3_filename || file.name,
         });
       }
 
       toast.dismiss(loadingToast);
-      
       toast.success('Video uploaded successfully!', {
         duration: 4000,
         position: 'bottom-right',
@@ -47,7 +57,6 @@ const UploadComponent = ({ onUploadComplete }) => {
       console.error('Error during upload:', error);
       
       toast.dismiss(loadingToast);
-      
       toast.error('An error occurred during the upload', {
         duration: 4000,
         position: 'bottom-right',
@@ -67,8 +76,15 @@ const UploadComponent = ({ onUploadComplete }) => {
             fill="currentColor"
             viewBox="0 0 16 16"
           >
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 
+            1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 
+            2 0 0 1-2 2H2a2 2 0 0 
+            1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 1.146a.5.5 0 0 
+            1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 
+            2.707V11.5a.5.5 0 0 1-1 
+            0V2.707L5.354 4.854a.5.5 0 1 
+            1-.708-.708l3-3z"/>
           </svg>
           <span className="text-sm font-medium">
             Click or Drag a Video File Here

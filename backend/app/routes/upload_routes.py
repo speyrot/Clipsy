@@ -6,12 +6,17 @@ from sqlalchemy.orm import Session
 import os
 import uuid
 import subprocess
+
 from app.config import settings
 from app.database import get_db
 from app.models import Video, ProcessingJob, VideoStatus, JobStatus, JobType
 from app.services.video_processing import process_video_task
+
 # NEW IMPORTS for S3
 from app.utils.s3_utils import upload_file_to_s3, delete_local_file
+from app.dependencies import get_current_user  # <-- so we can get the logged-in user
+from app.models.user import User               # <-- need this for type annotation
+
 import logging
 
 router = APIRouter()
@@ -42,7 +47,6 @@ def convert_to_cfr(input_path: str) -> str:
     cfr_path = base + "_cfr.mp4"
 
     desired_fps = "30"
-
     cmd = [
         "ffmpeg", "-y", "-i", input_path,
         "-r", desired_fps,
@@ -59,7 +63,11 @@ def convert_to_cfr(input_path: str) -> str:
     return cfr_path
 
 @router.post("/upload", summary="Upload a new video")
-async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_video(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # <-- attach user
+):
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
     local_file_path = os.path.join(UPLOAD_DIR, unique_filename)
@@ -72,7 +80,7 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
         buffer.write(content)
     logger.info(f"Saved uploaded file to {local_file_path}")
 
-    # 2. Check original file details (optional)
+    # 2. (Optional) ffprobe
     run_ffprobe(local_file_path, label="after upload")
 
     # 3. Convert to CFR
@@ -91,18 +99,18 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
     logger.info(f"Uploaded CFR file to S3 at key: {s3_key_cfr}. URL: {s3_url_cfr}")
 
     # (Optional) upload the original if desired
-    # s3_key_original = f"videos/{unique_filename}_original{file_extension}"
-    # s3_url_original = upload_file_to_s3(local_file_path, s3_key_original)
+    # ...
 
     # 5. Create the Video entry in DB
     video = Video(
-        upload_path=s3_url_cfr,  # store S3 URL as the upload_path
+        user_id=current_user.id,           # <-- store user ID
+        upload_path=s3_url_cfr,
         status=VideoStatus.uploaded
     )
     db.add(video)
     db.commit()
     db.refresh(video)
-    logger.info(f"Created Video record ID={video.id} with upload_path={s3_url_cfr}")
+    logger.info(f"Created Video record ID={video.id} with upload_path={s3_url_cfr}, user_id={current_user.id}")
 
     # 6. Create a ProcessingJob
     processing_job = ProcessingJob(
@@ -130,7 +138,11 @@ async def upload_video(file: UploadFile = File(...), db: Session = Depends(get_d
     )
 
 @router.post("/upload_only", summary="Upload a video without processing")
-async def upload_only(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_only(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # <-- attach user
+):
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
     local_file_path = os.path.join(UPLOAD_DIR, unique_filename)
@@ -157,13 +169,14 @@ async def upload_only(file: UploadFile = File(...), db: Session = Depends(get_db
 
     # 4. Create Video record in DB with status=uploaded
     video = Video(
+        user_id=current_user.id,           # <-- store user ID
         upload_path=s3_url_cfr,
         status=VideoStatus.uploaded
     )
     db.add(video)
     db.commit()
     db.refresh(video)
-    logger.info(f"(UploadOnly) Created Video record ID={video.id}")
+    logger.info(f"(UploadOnly) Created Video record ID={video.id}, user_id={current_user.id}")
 
     # (Optional) Clean up local files
     delete_local_file(local_file_path)

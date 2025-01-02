@@ -1,5 +1,5 @@
 // frontend/src/pages/CreatePage.js
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { EllipsisVerticalIcon, CheckCircleIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/solid';
 import { Toaster, toast } from 'react-hot-toast';
@@ -19,14 +19,73 @@ function CreatePage() {
 
   // New state for two-step flow
   const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [processedVideos, setProcessedVideos] = useState([]);
+  
   const [videoId, setVideoId] = useState(null);
   const [processingJobId, setProcessingJobId] = useState(null);
   const [processedVideoPath, setProcessedVideoPath] = useState(null);
-  const [processedVideos, setProcessedVideos] = useState([]);
   const [processingJobs, setProcessingJobs] = useState(new Map()); // Track multiple jobs
   const [previewVideo, setPreviewVideo] = useState(null);
 
-  // Handle upload completion from UploadComponent
+  // ---------------------------
+  // 1. Fetch user videos
+  // ---------------------------
+  useEffect(() => {
+    async function fetchUserVideos() {
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await fetch('http://127.0.0.1:8000/videos/', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          console.error("Failed to fetch user's videos");
+          return;
+        }
+        const data = await res.json();
+
+        const newUploads = [];
+        const newProcessed = [];
+
+        data.forEach((item) => {
+          // Fallback filename logic
+          const fallbackFilename =
+            item.filename ||
+            item.upload_path?.split('/').pop() ||
+            `Video_${item.id}`;
+
+          // Always build a base object
+          const baseVid = {
+            id: item.id,
+            upload_path: item.upload_path,
+            processed_path: item.processed_path,
+            status: item.status,
+            filename: fallbackFilename,
+            thumbnail: '/placeholder-thumbnail.jpg',
+          };
+
+          // If it has an upload_path, show in "Uploads"
+          if (item.upload_path) {
+            newUploads.push({ ...baseVid });
+          }
+          // If it has a processed_path, also show in "Post Production"
+          if (item.processed_path) {
+            newProcessed.push({ ...baseVid });
+          }
+        });
+
+        setUploadedVideos(newUploads);
+        setProcessedVideos(newProcessed);
+      } catch (err) {
+        console.error('Error fetching user videos:', err);
+      }
+    }
+
+    fetchUserVideos();
+  }, []);
+
+  // ---------------------------
+  // 2. Upload handling
+  // ---------------------------
   const handleUploadComplete = (uploadedData) => {
     const newVideo = {
       id: uploadedData.video_id,
@@ -71,7 +130,9 @@ function CreatePage() {
     }
   }, [uploadedVideos, processedVideos]);
 
-  // Handle individual video processing
+  // ---------------------------
+  // 3. Processing
+  // ---------------------------
   const handleProcessVideo = async (video) => {
     try {
       const response = await axios.post("http://127.0.0.1:8000/process_video_simple", {
@@ -108,7 +169,9 @@ function CreatePage() {
     }
   };
 
-  // Existing handlers
+  // ---------------------------
+  // 4. UI Handlers
+  // ---------------------------
   const toggleVideoSelection = (videoId) => {
     setSelectedVideos(prev => {
       const newSelection = new Set(prev);
@@ -205,7 +268,7 @@ function CreatePage() {
             <button 
               onClick={(e) => {
                 e.stopPropagation(); // Prevent selection toggle
-                handleVideoPreview(video);
+                handleVideoPreview(video, type); // Pass the type along with the video
               }}
               className="p-1 hover:bg-gray-100 rounded mr-1"
             >
@@ -431,8 +494,8 @@ function CreatePage() {
   };
 
   // Add handler for video preview
-  const handleVideoPreview = (video) => {
-    setPreviewVideo(video);
+  const handleVideoPreview = (video, type) => {
+    setPreviewVideo({ video, type });
   };
 
   return (
@@ -546,7 +609,8 @@ function CreatePage() {
       {/* Video Preview Modal */}
       {previewVideo && (
         <VideoPreviewModal
-          video={previewVideo}
+          video={previewVideo.video}
+          type={previewVideo.type}
           onClose={() => setPreviewVideo(null)}
         />
       )}
