@@ -25,6 +25,7 @@ def list_user_videos(
          "id": v.id,
          "upload_path": v.upload_path,
          "processed_path": v.processed_path,
+         "thumbnail_url": v.thumbnail_url,
          "status": v.status.value if v.status else None,
          "filename": "",  # if you stored original filename somewhere
        }

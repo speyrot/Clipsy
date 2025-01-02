@@ -60,7 +60,7 @@ function CreatePage() {
             processed_path: item.processed_path,
             status: item.status,
             filename: fallbackFilename,
-            thumbnail: '/placeholder-thumbnail.jpg',
+            thumbnail: item.thumbnail_url || '/placeholder-thumbnail.jpg',
           };
 
           // If it has an upload_path, show in "Uploads"

@@ -18,6 +18,9 @@ class Video(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     upload_path = Column(String, nullable=False)
     processed_path = Column(String, nullable=True)
+
+    thumbnail_url = Column(String, nullable=True)
+
     status = Column(Enum(VideoStatus), default=VideoStatus.uploaded)
 
     owner = relationship("User", back_populates="videos")
