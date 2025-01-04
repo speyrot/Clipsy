@@ -177,7 +177,7 @@ function CreatePage() {
   };
 
   // -------------------------------------------------
-  // 6. Deletion Handling [ADDED]
+  // 6. Deletion Handling 
   // -------------------------------------------------
   const handleDeleteVideo = async (video, type) => {
     try {
@@ -239,7 +239,50 @@ function CreatePage() {
   };
 
   // -------------------------------------------------
-  // 7. UI Handlers for Selection, Dropdown, etc.
+  // 7. Download Handling
+  // -------------------------------------------------
+  const handleDownloadVideo = async (video, type) => {
+    try {
+      let part = (type === 'upload') ? 'upload' : 'processed';
+      const token = localStorage.getItem('access_token');
+      
+      // Request the presigned (or direct) download link from your new route
+      const res = await fetch(`http://127.0.0.1:8000/videos/${video.id}/download?part=${part}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+  
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Download request failed', res.status, text);
+        toast.error('Failed to generate download link');
+        return;
+      }
+  
+      const data = await res.json();
+      const downloadUrl = data.download_url;  // from your route
+  
+      // Option 1: Programmatically open new tab
+      window.open(downloadUrl, '_blank');
+  
+      // Option 2: Force a "Save as" download
+      //    let a = document.createElement('a');
+      //    a.href = downloadUrl;
+      //    a.download = video.filename; // or "some-default-name.mp4"
+      //    document.body.appendChild(a);
+      //    a.click();
+      //    document.body.removeChild(a);
+  
+    } catch (err) {
+      console.error('Error downloading video:', err);
+      toast.error('Error downloading video');
+    }
+  };
+
+  // -------------------------------------------------
+  // 8. UI Handlers for Selection, Dropdown, etc.
   // -------------------------------------------------
   const toggleVideoSelection = (videoId) => {
     setSelectedVideos(prev => {
@@ -274,24 +317,24 @@ function CreatePage() {
   const handleActionClick = (e, action, video, type) => {
     e.stopPropagation();
     setActiveDropdown(null);
-
+  
     switch (action) {
       case 'rename':
         console.log('Rename:', video.filename);
         break;
       case 'delete':
-        handleDeleteVideo(video, type); 
+        handleDeleteVideo(video, type);
         break;
       case 'download':
-        console.log('Download:', video.filename);
+        handleDownloadVideo(video, type);
         break;
       default:
         break;
     }
-  };
+  };  
 
   // -------------------------------------------------
-  // 8. Video Card
+  // 9. Video Card
   // -------------------------------------------------
   const VideoCard = React.memo(({ video, type, onVideoClick }) => {
     const isSelected = type === 'upload' ? selectedVideos.has(video.id) : false;

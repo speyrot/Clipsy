@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 import logging
-
+import re
 from app.database import get_db
 from app.models.video import Video
 from app.models.user import User
@@ -101,3 +101,53 @@ def delete_video_part(
         # Just update the row. For example if the user only deleted the processed portion
         db.commit()
         return {"message": f"Successfully removed '{part}' from video ID {video.id}."}
+
+@router.get("/{video_id}/download", summary="Download either the uploaded or processed video")
+def download_video(
+    video_id: int,
+    part: str = Query(..., enum=["upload", "processed"]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a pre-signed S3 URL (or direct link) to download the requested part:
+    - part=upload => video.upload_path
+    - part=processed => video.processed_path
+    """
+    # 1) Look up the Video by ID, ensure belongs to current_user
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video or video.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Video not found or not owned by user")
+
+    # 2) Determine which S3 URL we need
+    if part == "upload":
+        if not video.upload_path:
+            raise HTTPException(status_code=400, detail="No upload_path found for this video")
+        s3_url = video.upload_path
+    else:
+        # part == "processed"
+        if not video.processed_path:
+            raise HTTPException(status_code=400, detail="No processed_path found for this video")
+        s3_url = video.processed_path
+
+    # 3) If your bucket is private, create a pre-signed URL so the user can download safely.
+    #    If your bucket is already public, you might just return s3_url directly.
+    s3_client = get_s3_client()
+    pattern = r"https://[^/]+/(.*)"  # everything after domain+slash
+    match = re.match(pattern, s3_url)
+    if not match:
+        raise HTTPException(status_code=400, detail="S3 URL not in expected format")
+    s3_key = match.group(1)
+
+    # example: generate presigned GET URL, good for X minutes
+    try:
+        presigned = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.AWS_S3_BUCKET_NAME, "Key": s3_key},
+            ExpiresIn=60 * 10  # 10 minutes, for example
+        )
+    except Exception as e:
+        logger.error(f"Error creating presigned URL for {s3_url}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate download link")
+
+    return {"download_url": presigned}
