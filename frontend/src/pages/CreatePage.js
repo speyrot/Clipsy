@@ -293,16 +293,26 @@ function CreatePage() {
   // -------------------------------------------------
   // 8. Video Card
   // -------------------------------------------------
-  const VideoCard = ({ video, type, onVideoClick }) => {
+  const VideoCard = React.memo(({ video, type, onVideoClick }) => {
     const isSelected = type === 'upload' ? selectedVideos.has(video.id) : false;
     const isUpload = type === 'upload';
     const atMaxSelections = selectedVideos.size >= MAX_SELECTIONS;
 
+    const handlePreviewClick = (e) => {
+      e.stopPropagation();
+      handleVideoPreview(video, type);
+    };
+
+    const handleDropdownButtonClick = (e) => {
+      e.stopPropagation();
+      handleDropdownClick(e, `${type}-${video.id}`);
+    };
+
     return (
-      <div
+      <div 
         onClick={() => isUpload && toggleVideoSelection(video.id)}
         className={`
-          flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden
+          flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden 
           transition-all duration-200 relative group
           ${isUpload ? 'cursor-pointer hover:bg-black/5' : ''}
           ${isSelected ? 'border-purple-500 bg-black/5' : 'hover:border-gray-300'}
@@ -331,6 +341,7 @@ function CreatePage() {
             src={video.thumbnail}
             alt="Video thumbnail"
             className="w-full h-full object-cover"
+            loading="lazy"
           />
         </div>
         <div className="px-3 py-2 flex items-center justify-between">
@@ -340,10 +351,7 @@ function CreatePage() {
           <div className="relative flex items-center">
             {/* Eye Icon for Preview */}
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleVideoPreview(video, type);
-              }}
+              onClick={handlePreviewClick}
               className="p-1 hover:bg-gray-100 rounded mr-1"
             >
               <EyeIcon className="w-5 h-5 text-gray-600 hover:text-purple-600" />
@@ -351,7 +359,7 @@ function CreatePage() {
 
             {/* Ellipsis Menu Button */}
             <button
-              onClick={(e) => handleDropdownClick(e, `${type}-${video.id}`)}
+              onClick={handleDropdownButtonClick}
               className="p-1 hover:bg-gray-100 rounded"
             >
               <EllipsisVerticalIcon className="w-5 h-5 text-gray-600" />
@@ -384,7 +392,10 @@ function CreatePage() {
         </div>
       </div>
     );
-  };
+  });
+
+  // Add display name for React DevTools
+  VideoCard.displayName = 'VideoCard';
 
   // Dummy caption styles for the demo
   const captionStyles = [
