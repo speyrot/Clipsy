@@ -20,10 +20,17 @@ class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
     id = Column(Integer, primary_key=True, index=True)
-    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False)
+    
+    video_id = Column(
+        Integer,
+        ForeignKey("videos.id", ondelete="CASCADE"), 
+        nullable=False
+    )
+    
     status = Column(Enum(JobStatus), default=JobStatus.pending)
     progress = Column(Float, default=0.0)
     job_type = Column(Enum(JobType), nullable=False)
-    processed_video_path = Column(String, nullable=True)  # If not already present
+    processed_video_path = Column(String, nullable=True)
 
     video = relationship("Video", back_populates="processing_jobs")
+

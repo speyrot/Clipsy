@@ -16,7 +16,7 @@ class Video(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    upload_path = Column(String, nullable=False)
+    upload_path = Column(String, nullable=True)
     processed_path = Column(String, nullable=True)
 
     thumbnail_url = Column(String, nullable=True)
@@ -25,4 +25,9 @@ class Video(Base):
 
     owner = relationship("User", back_populates="videos")
     speakers = relationship("Speaker", back_populates="video")
-    processing_jobs = relationship("ProcessingJob", back_populates="video")
+    
+    processing_jobs = relationship(
+        "ProcessingJob",
+        back_populates="video",
+        cascade="all, delete-orphan",
+    )

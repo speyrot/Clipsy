@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import Base, engine
 from app.models import Video, Speaker
 from app.routes import upload_routes, detect_routes, process_routes, status_routes, layout_routes, processed_video_routes, auth_routes, user_routes, task_routes, tag_routes, video_routes
+from app.routes.video_routes import router as video_router
 import os
 
 # Create tables
@@ -37,6 +38,7 @@ app.include_router(tag_routes.router)
 app.include_router(video_routes.router)
 # Serve the thumbnails directory
 app.mount("/thumbnails", StaticFiles(directory="app/thumbnails"), name="thumbnails")
+app.include_router(video_router, prefix="/videos", tags=["videos"])
 
 @app.get("/")
 async def read_root():

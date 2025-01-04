@@ -9,7 +9,9 @@ import ProcessingIndicator from '../components/ProcessingIndicator';
 import VideoPreviewModal from '../components/VideoPreviewModal';
 
 function CreatePage() {
-  // Existing state for selection and configuration
+  // -------------------------------------------------
+  // 1. Local State
+  // -------------------------------------------------
   const [selectedVideos, setSelectedVideos] = useState(new Set());
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -17,19 +19,20 @@ function CreatePage() {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const MAX_SELECTIONS = 3;
 
-  // New state for two-step flow
+  // Two lists: "uploaded" and "processed"
   const [uploadedVideos, setUploadedVideos] = useState([]);
   const [processedVideos, setProcessedVideos] = useState([]);
   
+  // For tracking processing tasks
   const [videoId, setVideoId] = useState(null);
   const [processingJobId, setProcessingJobId] = useState(null);
   const [processedVideoPath, setProcessedVideoPath] = useState(null);
   const [processingJobs, setProcessingJobs] = useState(new Map()); // Track multiple jobs
   const [previewVideo, setPreviewVideo] = useState(null);
 
-  // ---------------------------
-  // 1. Fetch user videos
-  // ---------------------------
+  // -------------------------------------------------
+  // 2. Fetch user videos
+  // -------------------------------------------------
   useEffect(() => {
     async function fetchUserVideos() {
       try {
@@ -83,9 +86,9 @@ function CreatePage() {
     fetchUserVideos();
   }, []);
 
-  // ---------------------------
-  // 2. Upload handling
-  // ---------------------------
+  // -------------------------------------------------
+  // 3. Handle Upload Completion
+  // -------------------------------------------------
   const handleUploadComplete = (uploadedData) => {
     const newVideo = {
       id: uploadedData.video_id,
@@ -96,7 +99,9 @@ function CreatePage() {
     setUploadedVideos(prev => [...prev, newVideo]);
   };
 
-  // Handle processing completion
+  // -------------------------------------------------
+  // 4. Processing Completion
+  // -------------------------------------------------
   const handleProcessingComplete = useCallback((videoId, processedPath) => {
     // Find the video that was being processed
     const processedVideo = uploadedVideos.find(v => v.id === videoId);
@@ -130,9 +135,9 @@ function CreatePage() {
     }
   }, [uploadedVideos, processedVideos]);
 
-  // ---------------------------
-  // 3. Processing
-  // ---------------------------
+  // -------------------------------------------------
+  // 5. Initiate Processing
+  // -------------------------------------------------
   const handleProcessVideo = async (video) => {
     try {
       const response = await axios.post("http://127.0.0.1:8000/process_video_simple", {
@@ -169,9 +174,71 @@ function CreatePage() {
     }
   };
 
-  // ---------------------------
-  // 4. UI Handlers
-  // ---------------------------
+  // -------------------------------------------------
+  // 6. Deletion Handling [ADDED]
+  // -------------------------------------------------
+  const handleDeleteVideo = async (video, type) => {
+    try {
+      let part = 'upload'; // default
+      if (type === 'upload') {
+        // If it also appears in processedVideos => just remove the upload portion
+        const isProcessed = processedVideos.some((p) => p.id === video.id);
+        if (!isProcessed) {
+          // Means there's no processed version => remove entire entry
+          part = 'both';
+        }
+      } else if (type === 'processed') {
+        // If it also appears in uploadedVideos => just remove the processed portion
+        const isUploaded = uploadedVideos.some((u) => u.id === video.id);
+        if (!isUploaded) {
+          // Means there's no upload => remove entire entry
+          part = 'both';
+        } else {
+          part = 'processed';
+        }
+      }
+
+      const token = localStorage.getItem('access_token');
+      const url = `http://127.0.0.1:8000/videos/${video.id}?part=${part}`;
+      const resp = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error('Delete request failed', resp.status, text);
+        toast.error('Failed to delete video');
+        return;
+      }
+
+      const result = await resp.json();
+      console.log('Delete success:', result);
+      toast.success(result.message);
+
+      // Now update local state
+      if (part === 'upload') {
+        // Remove from uploadedVideos
+        setUploadedVideos((prev) => prev.filter((vid) => vid.id !== video.id));
+        // The DB entry still exists => the processed part remains
+      } else if (part === 'processed') {
+        // Remove from processedVideos
+        setProcessedVideos((prev) => prev.filter((vid) => vid.id !== video.id));
+      } else {
+        // 'both' => remove from both arrays
+        setUploadedVideos((prev) => prev.filter((vid) => vid.id !== video.id));
+        setProcessedVideos((prev) => prev.filter((vid) => vid.id !== video.id));
+      }
+    } catch (err) {
+      console.error('Error deleting video:', err);
+      toast.error('Error deleting video');
+    }
+  };
+
+  // -------------------------------------------------
+  // 7. UI Handlers for Selection, Dropdown, etc.
+  // -------------------------------------------------
   const toggleVideoSelection = (videoId) => {
     setSelectedVideos(prev => {
       const newSelection = new Set(prev);
@@ -202,16 +269,16 @@ function CreatePage() {
     setActiveDropdown(activeDropdown === id ? null : id);
   };
 
-  const handleActionClick = (e, action, video) => {
+  const handleActionClick = (e, action, video, type) => {
     e.stopPropagation();
     setActiveDropdown(null);
-    
-    switch(action) {
+
+    switch (action) {
       case 'rename':
         console.log('Rename:', video.filename);
         break;
       case 'delete':
-        console.log('Delete:', video.filename);
+        handleDeleteVideo(video, type); 
         break;
       case 'download':
         console.log('Download:', video.filename);
@@ -221,41 +288,46 @@ function CreatePage() {
     }
   };
 
+  // -------------------------------------------------
+  // 8. Video Card
+  // -------------------------------------------------
   const VideoCard = ({ video, type, onVideoClick }) => {
     const isSelected = type === 'upload' ? selectedVideos.has(video.id) : false;
     const isUpload = type === 'upload';
     const atMaxSelections = selectedVideos.size >= MAX_SELECTIONS;
 
     return (
-      <div 
+      <div
         onClick={() => isUpload && toggleVideoSelection(video.id)}
         className={`
-          flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden 
+          flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden
           transition-all duration-200 relative group
           ${isUpload ? 'cursor-pointer hover:bg-black/5' : ''}
           ${isSelected ? 'border-purple-500 bg-black/5' : 'hover:border-gray-300'}
           ${isUpload && atMaxSelections && !isSelected ? 'cursor-not-allowed opacity-50' : ''}
         `}
       >
-        {/* Checkmark - Only show for upload section */}
+        {/* Checkmark - Only for upload section */}
         {isUpload && (
           <div className="absolute top-2 right-2 z-10 transition-all duration-200">
             {isSelected ? (
               <CheckCircleIcon className="w-6 h-6 text-purple-500" />
             ) : (
-              <div className={`
-                w-5 h-5 rounded-full border-2 border-gray-400/70 
-                opacity-0 group-hover:opacity-100 bg-white/50
-                ${atMaxSelections ? 'hidden' : ''}
-              `} />
+              <div
+                className={`
+                  w-5 h-5 rounded-full border-2 border-gray-400/70
+                  opacity-0 group-hover:opacity-100 bg-white/50
+                  ${atMaxSelections ? 'hidden' : ''}
+                `}
+              />
             )}
           </div>
         )}
 
         <div className="aspect-video bg-gray-100">
-          <img 
-            src={video.thumbnail} 
-            alt="Video thumbnail" 
+          <img
+            src={video.thumbnail}
+            alt="Video thumbnail"
             className="w-full h-full object-cover"
           />
         </div>
@@ -265,41 +337,41 @@ function CreatePage() {
           </p>
           <div className="relative flex items-center">
             {/* Eye Icon for Preview */}
-            <button 
+            <button
               onClick={(e) => {
-                e.stopPropagation(); // Prevent selection toggle
-                handleVideoPreview(video, type); // Pass the type along with the video
+                e.stopPropagation();
+                handleVideoPreview(video, type);
               }}
               className="p-1 hover:bg-gray-100 rounded mr-1"
             >
               <EyeIcon className="w-5 h-5 text-gray-600 hover:text-purple-600" />
             </button>
-            
+
             {/* Ellipsis Menu Button */}
-            <button 
+            <button
               onClick={(e) => handleDropdownClick(e, `${type}-${video.id}`)}
               className="p-1 hover:bg-gray-100 rounded"
             >
               <EllipsisVerticalIcon className="w-5 h-5 text-gray-600" />
             </button>
-            
+
             {/* Dropdown Menu */}
             {activeDropdown === `${type}-${video.id}` && (
               <div className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
                 <button
-                  onClick={(e) => handleActionClick(e, 'rename', video)}
+                  onClick={(e) => handleActionClick(e, 'rename', video, type)}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Rename
                 </button>
                 <button
-                  onClick={(e) => handleActionClick(e, 'download', video)}
+                  onClick={(e) => handleActionClick(e, 'download', video, type)}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Download
                 </button>
                 <button
-                  onClick={(e) => handleActionClick(e, 'delete', video)}
+                  onClick={(e) => handleActionClick(e, 'delete', video, type)}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                 >
                   Delete
@@ -326,6 +398,9 @@ function CreatePage() {
     { value: '480p', label: '480p SD' },
   ];
 
+  // -------------------------------------------------
+  // 9. Config Modal
+  // -------------------------------------------------
   const handleConfigSave = async (videoId, config) => {
     setVideoConfigs(prev => ({
       ...prev,
@@ -493,7 +568,9 @@ function CreatePage() {
     );
   };
 
-  // Add handler for video preview
+  // -------------------------------------------------
+  // 10. Video Preview
+  // -------------------------------------------------
   const handleVideoPreview = (video, type) => {
     setPreviewVideo({ video, type });
   };
