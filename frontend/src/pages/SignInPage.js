@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function SignInPage() {
+function SignInPage({ setToken }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,8 +27,8 @@ function SignInPage() {
       }
 
       const data = await response.json();
-      // data.access_token => store in localStorage
       localStorage.setItem('access_token', data.access_token);
+      setToken(data.access_token);
       
       // redirect to dashboard or wherever
       navigate('/');
