@@ -68,7 +68,7 @@ def convert_to_cfr(input_path: str) -> str:
 async def upload_video(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)  # <-- attach user
+    current_user: User = Depends(get_current_user)
 ):
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
@@ -100,14 +100,18 @@ async def upload_video(
     s3_url_cfr = upload_file_to_s3(cfr_local_path, s3_key_cfr)
     logger.info(f"Uploaded CFR file to S3 at key: {s3_key_cfr}. URL: {s3_url_cfr}")
 
-    # (Optional) upload the original if desired
-    # ...
+    # Generate thumbnail before creating Video entry
+    thumbnail_url = generate_and_upload_thumbnail(
+        cfr_local_path,
+        f"thumbnails/{unique_filename}"
+    )
 
     # 5. Create the Video entry in DB
     video = Video(
-        user_id=current_user.id,           # <-- store user ID
+        user_id=current_user.id,
         upload_path=s3_url_cfr,
-        status=VideoStatus.uploaded
+        status=VideoStatus.uploaded,
+        thumbnail_url=thumbnail_url  # Add thumbnail URL
     )
     db.add(video)
     db.commit()
@@ -135,7 +139,12 @@ async def upload_video(
     delete_local_file(cfr_local_path)
 
     return JSONResponse(
-        content={"video_id": video.id, "job_id": processing_job.id},
+        content={
+            "video_id": video.id, 
+            "job_id": processing_job.id,
+            "thumbnail_url": thumbnail_url,  # Include thumbnail URL in response
+            "filename": file.filename  # Include original filename
+        },
         status_code=201
     )
 
@@ -191,8 +200,13 @@ async def upload_only(
     delete_local_file(local_file_path)
     delete_local_file(cfr_local_path)
 
-    # 6. Return the video_id and S3 URL
-    return {"video_id": video.id, "s3_url": s3_url_cfr}
+    # 6. Return the video_id, S3 URL, and thumbnail URL
+    return {
+        "video_id": video.id, 
+        "s3_url": s3_url_cfr,
+        "thumbnail_url": thumbnail_url,  
+        "s3_filename": file.filename  
+    }
 
 def generate_and_upload_thumbnail(video_path: str, s3_key_prefix: str) -> str:
     """

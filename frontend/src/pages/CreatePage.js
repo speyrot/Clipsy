@@ -90,12 +90,14 @@ function CreatePage() {
   // 3. Handle Upload Completion
   // -------------------------------------------------
   const handleUploadComplete = (uploadedData) => {
+    console.log('Received upload data:', uploadedData);
     const newVideo = {
       id: uploadedData.video_id,
       s3Url: uploadedData.s3_url,
       filename: uploadedData.filename,
-      thumbnail: '/placeholder-thumbnail.jpg',
+      thumbnail: uploadedData.thumbnail_url || '/placeholder-thumbnail.jpg',
     };
+    console.log('Created new video object:', newVideo);
     setUploadedVideos(prev => [...prev, newVideo]);
   };
 

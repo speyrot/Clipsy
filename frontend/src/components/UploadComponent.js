@@ -38,12 +38,17 @@ const UploadComponent = ({ onUploadComplete }) => {
         },
       });
 
+      console.log('Upload response data:', response.data);
+
       if (onUploadComplete) {
-        onUploadComplete({
+        const uploadData = {
           video_id: response.data.video_id,
           s3_url: response.data.s3_url,
           filename: response.data.s3_filename || file.name,
-        });
+          thumbnail_url: response.data.thumbnail_url,
+        };
+        console.log('Data passed to onUploadComplete:', uploadData);
+        onUploadComplete(uploadData);
       }
 
       toast.dismiss(loadingToast);
