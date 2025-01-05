@@ -13,10 +13,13 @@ from app.models.video import VideoStatus
 from app.utils.s3_utils import get_s3_client
 from app.config import settings
 from pydantic import BaseModel
+import os
 
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 logger = logging.getLogger(__name__)
+
+s3_client = get_s3_client()
 
 class VideoRenameRequest(BaseModel):
     name: str
@@ -112,48 +115,51 @@ def download_video(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Generate a pre-signed S3 URL (or direct link) to download the requested part:
-    - part=upload => video.upload_path
-    - part=processed => video.processed_path
-    """
-    # 1) Look up the Video by ID, ensure belongs to current_user
+    """Generate a pre-signed S3 URL for download"""
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video or video.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Video not found or not owned by user")
 
-    # 2) Determine which S3 URL we need
     if part == "upload":
         if not video.upload_path:
             raise HTTPException(status_code=400, detail="No upload_path found for this video")
         s3_url = video.upload_path
     else:
-        # part == "processed"
         if not video.processed_path:
             raise HTTPException(status_code=400, detail="No processed_path found for this video")
         s3_url = video.processed_path
 
-    # 3) If your bucket is private, create a pre-signed URL so the user can download safely.
-    #    If your bucket is already public, you might just return s3_url directly.
-    s3_client = get_s3_client()
     pattern = r"https://[^/]+/(.*)"  
     match = re.match(pattern, s3_url)
     if not match:
         raise HTTPException(status_code=400, detail="S3 URL not in expected format")
     s3_key = match.group(1)
 
-    # example: generate presigned GET URL, good for X minutes
+    # Get the file extension from the S3 key
+    _, ext = os.path.splitext(s3_key)
+    
+    # Use the video's name or generate a filename
+    download_filename = f"{video.name}{ext}" if video.name else f"video_{video.id}{ext}"
+    
     try:
+        # Add ResponseContentDisposition to suggest filename to browser
         presigned = s3_client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": settings.AWS_S3_BUCKET_NAME, "Key": s3_key},
-            ExpiresIn=60 * 10  # 10 minutes, for example
+            Params={
+                "Bucket": settings.AWS_S3_BUCKET_NAME,
+                "Key": s3_key,
+                "ResponseContentDisposition": f'attachment; filename="{download_filename}"'
+            },
+            ExpiresIn=60 * 10  # 10 minutes
         )
     except Exception as e:
         logger.error(f"Error creating presigned URL for {s3_url}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate download link")
 
-    return {"download_url": presigned}
+    return {
+        "download_url": presigned,
+        "filename": download_filename
+    }
 
 @router.patch("/{video_id}/rename", summary="Rename a video")
 def rename_video(

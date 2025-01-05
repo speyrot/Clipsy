@@ -189,7 +189,8 @@ async def upload_only(
         user_id=current_user.id,
         upload_path=s3_url_cfr,
         status=VideoStatus.uploaded,
-        thumbnail_url=thumbnail_url  # store it if not None
+        thumbnail_url=thumbnail_url,
+        name=file.filename  
     )
     db.add(video)
     db.commit()
@@ -205,7 +206,7 @@ async def upload_only(
         "video_id": video.id, 
         "s3_url": s3_url_cfr,
         "thumbnail_url": thumbnail_url,  
-        "s3_filename": file.filename  
+        "name": file.filename  
     }
 
 def generate_and_upload_thumbnail(video_path: str, s3_key_prefix: str) -> str:

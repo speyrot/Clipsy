@@ -13,6 +13,9 @@ const RenameModal = ({
 }) => {
   if (!isOpen || !targetVideo) return null;
   
+  const nameWithoutExtension = (targetVideo.name || targetVideo.filename || "")
+    .replace(/\.[^/.]+$/, "");
+
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
       <div className="bg-white rounded-lg max-w-md w-full p-6">
@@ -27,7 +30,7 @@ const RenameModal = ({
         <div className="flex items-center gap-2">
           <input
             type="text"
-            value={newName}
+            value={newName.replace(/\.[^/.]+$/, "")}
             onChange={(e) => setNewName(e.target.value)}
             className="flex-1 border rounded p-2"
           />

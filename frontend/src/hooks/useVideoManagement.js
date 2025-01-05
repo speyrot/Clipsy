@@ -103,7 +103,15 @@ export const useVideoManagement = () => {
       if (!res.ok) throw new Error(await res.text());
 
       const { download_url } = await res.json();
-      window.open(download_url, '_blank');
+
+      // Create an invisible anchor element to trigger the download
+      const link = document.createElement('a');
+      link.href = download_url;
+      // The filename will be handled by the Content-Disposition header from the presigned URL
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
     } catch (err) {
       console.error('Error downloading video:', err);
