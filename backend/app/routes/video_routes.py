@@ -12,10 +12,14 @@ from app.dependencies import get_current_user
 from app.models.video import VideoStatus
 from app.utils.s3_utils import get_s3_client
 from app.config import settings
+from pydantic import BaseModel
 
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 logger = logging.getLogger(__name__)
+
+class VideoRenameRequest(BaseModel):
+    name: str
 
 @router.get("/", summary="List user's videos")
 def list_user_videos(
@@ -32,8 +36,8 @@ def list_user_videos(
          "upload_path": v.upload_path,
          "processed_path": v.processed_path,
          "thumbnail_url": v.thumbnail_url,
-         "status": v.status.value if v.status else None,
-         "filename": "",  # if you stored original filename somewhere
+         "status": v.status.value if v.status else None, 
+         "name": v.name,
        }
        for v in user_videos
     ]
@@ -68,8 +72,7 @@ def delete_video_part(
     def delete_s3_object(url: str):
         if not url:
             return
-        import re
-        pattern = r"https://[^/]+/(.*)"  # everything after domain+slash
+        pattern = r"https://[^/]+/(.*)"  
         match = re.match(pattern, url)
         if match:
             key = match.group(1)
@@ -133,7 +136,7 @@ def download_video(
     # 3) If your bucket is private, create a pre-signed URL so the user can download safely.
     #    If your bucket is already public, you might just return s3_url directly.
     s3_client = get_s3_client()
-    pattern = r"https://[^/]+/(.*)"  # everything after domain+slash
+    pattern = r"https://[^/]+/(.*)"  
     match = re.match(pattern, s3_url)
     if not match:
         raise HTTPException(status_code=400, detail="S3 URL not in expected format")
@@ -151,3 +154,25 @@ def download_video(
         raise HTTPException(status_code=500, detail="Failed to generate download link")
 
     return {"download_url": presigned}
+
+@router.patch("/{video_id}/rename", summary="Rename a video")
+def rename_video(
+    video_id: int,
+    payload: VideoRenameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Renames the video to a new name provided by the user."""
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video or video.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Video not found or not owned by user")
+
+    video.name = payload.name
+    db.commit()
+    db.refresh(video)
+    
+    return {
+        "id": video.id,
+        "name": video.name,
+        "message": f"Video renamed to '{video.name}' successfully."
+    }

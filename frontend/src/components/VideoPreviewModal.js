@@ -4,8 +4,29 @@ import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 
 const VideoPreviewModal = ({ video, type, onClose }) => {
+  if (!video) return null;
+
   // Use the type prop to determine which URL to use
-  const videoUrl = type === 'upload' ? video.upload_path : video.processed_path;
+  const videoUrl = type === 'processed' ? video.processed_path : video.upload_path;
+
+  // If no valid URL is available, show an error
+  if (!videoUrl) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg max-w-4xl w-full">
+          <div className="flex justify-between items-center p-4 border-b">
+            <h3 className="text-xl font-semibold text-gray-800">Error</h3>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
+              <XMarkIcon className="h-6 w-6 text-gray-500" />
+            </button>
+          </div>
+          <div className="p-4">
+            <p className="text-red-500">Video URL not available.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -13,7 +34,7 @@ const VideoPreviewModal = ({ video, type, onClose }) => {
         {/* Modal Header */}
         <div className="flex justify-between items-center p-4 border-b">
           <h3 className="text-xl font-semibold text-gray-800">
-            {video.filename}
+            {video.name || video.filename}
           </h3>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
             <XMarkIcon className="h-6 w-6 text-gray-500" />
