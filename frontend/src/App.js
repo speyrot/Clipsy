@@ -27,7 +27,7 @@ function App() {
   return (
     <Router>
       {/* Conditionally render the Navbar if we have a token in state */}
-      {token && <Navbar onLogout={() => setToken('')} />}
+      {token && <Navbar setToken={setToken} />}
 
       <Routes>
         {/* Public Routes */}

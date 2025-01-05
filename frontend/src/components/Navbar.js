@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-function Navbar() {
+function Navbar({ setToken }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -24,6 +24,7 @@ function Navbar() {
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem('access_token');
+    setToken('');
     navigate('/signin'); // go back to sign-in page
   };
 
