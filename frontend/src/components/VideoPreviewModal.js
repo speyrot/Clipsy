@@ -53,20 +53,7 @@ const VideoPreviewModal = ({ video, type, onClose }) => {
               Your browser does not support the video tag.
             </video>
           </div>
-
-          {/* Video Details */}
-          <div className="mt-4 space-y-2">
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Type:</span>{' '}
-              {type === 'upload' ? 'Original Upload' : 'Processed Video'}
-            </p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">URL:</span>{' '}
-              {videoUrl}
-            </p>
-          </div>
         </div>
-
         {/* Modal Footer */}
         <div className="flex justify-end p-4 border-t">
           <button

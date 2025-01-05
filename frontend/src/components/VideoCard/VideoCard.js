@@ -36,9 +36,9 @@ const VideoCard = React.memo(({
       onClick={() => isUpload && onSelect(video.id)}
       className={`
         flex-shrink-0 w-64 rounded-lg border border-gray-200 overflow-hidden 
-        transition-all duration-200 relative group
+        transition-all duration-200 relative group hover:border-2 hover:border-purple-500
         ${isUpload ? 'cursor-pointer hover:bg-black/5' : ''}
-        ${isSelected ? 'border-purple-500 bg-black/5' : 'hover:border-gray-300'}
+        ${isSelected ? 'border-purple-500 bg-black/5' : ''}
         ${isUpload && atMaxSelections && !isSelected ? 'cursor-not-allowed opacity-50' : ''}
       `}
     >
@@ -50,7 +50,7 @@ const VideoCard = React.memo(({
           ) : (
             <div
               className={`
-                w-5 h-5 rounded-full border-2 border-gray-400/70
+                w-5 h-5 rounded-full border-2 border-purple-500/70
                 opacity-0 group-hover:opacity-100 bg-white/50
                 ${atMaxSelections ? 'hidden' : ''}
               `}
@@ -85,7 +85,7 @@ const VideoCard = React.memo(({
             onClick={handleDropdownButtonClick}
             className="p-1 hover:bg-gray-100 rounded"
           >
-            <EllipsisVerticalIcon className="w-5 h-5 text-gray-600" />
+            <EllipsisVerticalIcon className="w-5 h-5 text-gray-600 hover:text-purple-600" />
           </button>
 
           {/* Dropdown Menu */}

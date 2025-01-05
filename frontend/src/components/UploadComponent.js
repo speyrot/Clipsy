@@ -72,8 +72,8 @@ const UploadComponent = ({ onUploadComplete }) => {
   };
 
   return (
-    <div className="flex-shrink-0 w-64 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
-      <label className="w-full aspect-video cursor-pointer bg-gray-50 hover:bg-gray-100 flex flex-col justify-center items-center transition-colors">
+    <div className="flex-shrink-0 w-64 h-[190px] rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
+      <div className="w-full h-full cursor-pointer bg-gray-100 hover:bg-gray-200 flex flex-col justify-center items-center">
         <div className="flex flex-col items-center text-gray-500 text-sm">
           <svg 
             xmlns="http://www.w3.org/2000/svg"
@@ -81,15 +81,8 @@ const UploadComponent = ({ onUploadComplete }) => {
             fill="currentColor"
             viewBox="0 0 16 16"
           >
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 
-            1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 
-            2 0 0 1-2 2H2a2 2 0 0 
-            1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 
-            1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 
-            2.707V11.5a.5.5 0 0 1-1 
-            0V2.707L5.354 4.854a.5.5 0 1 
-            1-.708-.708l3-3z"/>
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
           </svg>
           <span className="text-sm font-medium">
             Click or Drag a Video File Here
@@ -102,7 +95,7 @@ const UploadComponent = ({ onUploadComplete }) => {
           accept="video/*"
           disabled={isUploading}
         />
-      </label>
+      </div>
     </div>
   );
 };
