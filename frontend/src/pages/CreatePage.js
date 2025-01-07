@@ -249,10 +249,6 @@ function CreatePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* 
-                    NEW/CHANGED: Add a top row for “upload.” 
-                    Instead of a big tile, we show a single row the user can click
-                  */}
                   <tr
                     className="border-b last:border-b-0 cursor-pointer hover:bg-gray-50"
                     onClick={(e) => {

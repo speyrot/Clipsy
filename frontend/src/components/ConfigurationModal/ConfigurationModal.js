@@ -1,8 +1,10 @@
 // frontend/src/components/ConfigurationModal/ConfigurationModal.js
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 import { captionStyles, resolutionOptions } from '../../constants';
+import axiosInstance from '../../utils/axios';
+import { toast } from 'react-hot-toast';
 
 const ConfigurationModal = ({ 
   onClose, 
@@ -13,13 +15,44 @@ const ConfigurationModal = ({
   videoConfigs,
   currentVideo 
 }) => {
-  // Initialize config with current video's data
+  // Initialize config with current video's display name instead of s3 filename
   const [config, setConfig] = useState({
-    filename: currentVideo?.filename || '',
+    filename: currentVideo?.name || currentVideo?.filename || '',
     resolution: '1080p',
     autoCaptions: false,
     captionStyle: null
   });
+
+  // Track original filename to detect changes
+  const [originalFilename] = useState(currentVideo?.name || currentVideo?.filename || '');
+
+  // Handle filename change and rename API call
+  const handleFilenameChange = async (newFilename) => {
+    setConfig(prev => ({ ...prev, filename: newFilename }));
+  };
+
+  // Handle save with potential rename
+  const handleSave = async () => {
+    try {
+      // If filename was changed, call rename API first
+      if (config.filename !== originalFilename) {
+        // Match the backend VideoRenameRequest model
+        const payload = {
+          name: config.filename  // Changed from new_name to name
+        };
+        
+        console.log('Rename payload:', payload);
+        
+        await axiosInstance.patch(`/videos/${currentVideo.id}/rename`, payload);
+      }
+      
+      // Then proceed with normal save
+      onSave(currentVideo.id, config);
+    } catch (error) {
+      console.error('Error details:', error.response?.data);
+      toast.error('Failed to rename video. Please try again.');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -39,17 +72,17 @@ const ConfigurationModal = ({
 
         {/* Modal Content */}
         <div className="p-6 space-y-6">
-          {/* Filename */}
+          {/* Filename - Now editable */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Output Filename
+              Video Name
             </label>
             <input
               type="text"
               value={config.filename}
-              onChange={e => setConfig(prev => ({ ...prev, filename: e.target.value }))}
+              onChange={(e) => handleFilenameChange(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-              disabled
+              placeholder="Enter video name"
             />
           </div>
 
@@ -133,7 +166,7 @@ const ConfigurationModal = ({
             Previous
           </button>
           <button
-            onClick={() => onSave(currentVideo.id, config)}
+            onClick={handleSave}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
           >
             {currentVideoIndex === selectedVideos.length - 1 
