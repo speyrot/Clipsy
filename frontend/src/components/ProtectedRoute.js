@@ -1,17 +1,17 @@
 // frontend/src/components/ProtectedRoute.js
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
-function ProtectedRoute({ children }) {
+const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('access_token');
+  const location = useLocation();
 
   if (!token) {
-    // Not logged in => redirect
-    return <Navigate to="/signin" replace />;
+    // Redirect to login page but save the attempted URL
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Logged in => render children
   return children;
-}
+};
 
 export default ProtectedRoute;

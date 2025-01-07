@@ -324,9 +324,9 @@ function CalendarPage() {
       MAIN RENDER
   -------------------------------------------------------------------------- */
   return (
-    <div className="p-6">
+    <div className="px-8 py-6">
       {/* Top bar (heading, navigation, toggles, new post) */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         {/* Left side: Title (e.g. "All Channels" from your screenshot) */}
         <div className="flex items-center space-x-2">
           {/* Example: channel icon + "All Channels" label */}

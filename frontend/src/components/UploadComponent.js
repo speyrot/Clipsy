@@ -1,7 +1,7 @@
 // frontend/src/components/UploadComponent.js
 
 import React, { useState, useId } from 'react';
-import axios from 'axios';
+import axiosInstance from '../utils/axios';
 import { toast } from 'react-hot-toast';
 
 const UploadComponent = ({ onUploadComplete, inputId }) => {
@@ -16,14 +16,6 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      toast.error('No access token found. Please sign in first.', {
-        position: 'bottom-right',
-      });
-      return;
-    }
-
     const formData = new FormData();
     formData.append('file', file);
 
@@ -33,13 +25,12 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
 
     try {
       setIsUploading(true);
-      const response = await axios.post(
-        'http://127.0.0.1:8000/upload_only',
+      const response = await axiosInstance.post(
+        '/upload_only',
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${token}`,
           },
         }
       );

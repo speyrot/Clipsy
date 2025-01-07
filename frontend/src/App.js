@@ -38,7 +38,7 @@ function App() {
         <Route
           path="/"
           element={
-            <ProtectedRoute token={token}>
+            <ProtectedRoute>
               <DashboardPage />
             </ProtectedRoute>
           }
@@ -46,7 +46,7 @@ function App() {
         <Route
           path="/create"
           element={
-            <ProtectedRoute token={token}>
+            <ProtectedRoute>
               <CreatePage />
             </ProtectedRoute>
           }
@@ -54,7 +54,7 @@ function App() {
         <Route
           path="/plan"
           element={
-            <ProtectedRoute token={token}>
+            <ProtectedRoute>
               <PlanPage />
             </ProtectedRoute>
           }
@@ -62,7 +62,7 @@ function App() {
         <Route
           path="/calendar"
           element={
-            <ProtectedRoute token={token}>
+            <ProtectedRoute>
               <CalendarPage />
             </ProtectedRoute>
           }

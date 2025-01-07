@@ -18,6 +18,7 @@ import { ChevronDownIcon } from '@heroicons/react/20/solid';
 
 // DRAG & DROP from @hello-pangea/dnd
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import axiosInstance from '../utils/axios';
 
 const TAG_COLORS = [
   { bg: 'bg-blue-100', text: 'text-blue-600' },
@@ -116,16 +117,8 @@ function PlanPage() {
   // Fetch tasks from the backend
   const fetchTasks = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:8000/tasks', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        console.error('Failed to fetch tasks');
-        return;
-      }
-      const data = await response.json();
-      setTasks(data);
+      const response = await axiosInstance.get('/tasks');
+      setTasks(response.data);
     } catch (error) {
       console.error('Error fetching tasks:', error);
     }
@@ -134,16 +127,8 @@ function PlanPage() {
   // Fetch the user’s existing tags from GET /tags
   const fetchUserTags = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:8000/tags', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        console.error('Failed to fetch user tags');
-        return;
-      }
-      const data = await res.json();
-      // Convert them into an array of objects with encoded IDs
+      const response = await axiosInstance.get('/tags');
+      const data = response.data;
       const converted = data.map((tagName) => ({
         id: encodeURIComponent(tagName.toLowerCase()),
         name: tagName,
@@ -159,12 +144,9 @@ function PlanPage() {
   // ---------------------------
   const createTask = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-
-      // Convert selectedTags (which are encoded IDs) back to actual names
       const tagNames = selectedTags.map((tagId) => {
         const found = userTags.find((t) => t.id === tagId);
-        return found ? found.name : decodeURIComponent(tagId); // fallback to decoded ID
+        return found ? found.name : decodeURIComponent(tagId);
       });
 
       const payload = {
@@ -174,23 +156,8 @@ function PlanPage() {
         tags: tagNames,
       };
 
-      const response = await fetch('http://localhost:8000/tasks', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        console.error('Failed to create task');
-        return;
-      }
-
-      const newTask = await response.json();
-      setTasks((prev) => [...prev, newTask]);
-
-      // reset fields
+      const response = await axiosInstance.post('/tasks', payload);
+      setTasks((prev) => [...prev, response.data]);
       closeModal();
     } catch (error) {
       console.error('Error creating task:', error);
@@ -295,7 +262,7 @@ function PlanPage() {
       // Convert tag names to IDs for the dropdown
       const tagIds = task.tags.map((tagName) => {
         const found = userTags.find((t) => t.name === tagName);
-        return found ? found.id : encodeURIComponent(tagName.toLowerCase()); // fallback
+        return found ? found.id : encodeURIComponent(tagName.toLowerCase()); 
       });
       setSelectedTags(tagIds);
     } else {
@@ -426,11 +393,11 @@ function PlanPage() {
   // RENDER
   // ---------------------------
   return (
-    <div className="p-6 space-y-4 relative">
+    <div className="px-8 py-6">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-bold text-gray-800">Plan Page</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Plan Page</h1>
         </div>
 
         <div className="flex items-center space-x-2">
