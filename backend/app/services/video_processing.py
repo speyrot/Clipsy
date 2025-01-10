@@ -21,6 +21,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import uuid
 import whisper
+import datetime
+import re  
 
 # NEW IMPORTS for S3 handling
 from app.utils.s3_utils import (
@@ -28,6 +30,8 @@ from app.utils.s3_utils import (
     upload_file_to_s3,
     delete_local_file
 )
+
+ASS_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "my_subtitles.ass")
 
 import tempfile
 
@@ -231,9 +235,16 @@ def process_video_task(video_id: int, job_id: int, auto_captions: bool = False):
             # 3. Add auto captions if requested
             if auto_captions:
                 srt_path = generate_srt_with_whisper(local_processed_path)
-                local_captioned_path = local_processed_path.rsplit('.', 1)[0] + '_with_captions.mp4'
+
+                local_ass_path = srt_path.rsplit('.', 1)[0] + '.ass'
+                srt_to_ass(srt_path, ASS_TEMPLATE_PATH, local_ass_path)
                 
-                burn_in_captions(local_processed_path, srt_path, local_captioned_path)
+                local_captioned_path = local_processed_path.rsplit('.', 1)[0] + '_with_captions.mp4'
+                burn_in_ass_captions(
+                    local_processed_path,
+                    local_ass_path,
+                    local_captioned_path
+                )
                 delete_local_file(local_processed_path)
                 local_processed_path = local_captioned_path
 
@@ -328,3 +339,152 @@ def burn_in_captions(input_video: str, srt_file: str, output_video: str):
         raise RuntimeError("Failed to burn captions via ffmpeg.")
     
     logger.info("Captions burned successfully.")
+
+
+def srt_to_ass(srt_path: str, template_ass_path: str, output_ass_path: str):
+    """
+    Naively convert an .srt file's lines into .ass 'Dialogue:' lines,
+    reusing the [Script Info] + [V4+ Styles] from `template_ass_path`.
+    Then write the combined result to `output_ass_path`.
+
+    1) We'll read all lines from `template_ass_path` up to the "[Events]" section,
+       store them. Then we write our own "[Events]" block with the
+       newly created "Dialogue: ..." lines from the SRT file.
+    2) We assume the template .ass includes a "Default" style in the [V4+ Styles] section.
+
+    NOTE: This is a minimal approach with simplistic SRT parsing.
+    """
+    # 1) Grab the lines from the template .ass
+    with open(template_ass_path, 'r', encoding='utf-8') as f:
+        template_lines = f.readlines()
+
+    # We'll separate them into:
+    #  - everything up to "[Events]" or "Events]" 
+    #  - ignore or remove any existing lines in [Events] from the template
+    header_lines = []
+    found_events = False
+    for line in template_lines:
+        # Check if line starts with "[Events]"
+        if line.strip().lower().startswith("[events]"):
+            found_events = True
+            break
+        header_lines.append(line)
+
+    # 2) Parse the SRT lines => produce a list of (start_time, end_time, text)
+    #    We'll store times in ASS format "H:MM:SS.xx" or "0:00:05.07" etc.
+    #    SRT times are "HH:MM:SS,mmm"
+    subs = []
+    with open(srt_path, 'r', encoding='utf-8') as f:
+        srt_data = f.read().strip()
+
+    # A naive SRT chunk parser:
+    # each block is:
+    #   number
+    #   00:00:01,200 --> 00:00:03,400
+    #   line of text
+    #   line of text
+    #   (blank line)
+    blocks = srt_data.split("\n\n")
+    for block in blocks:
+        lines = block.splitlines()
+        if len(lines) >= 2:
+            # lines[0] is the numeric index
+            # lines[1] is the time range
+            # the rest are text lines
+            time_line = lines[1]
+            text_lines = lines[2:]
+            full_text = " ".join(text_lines).replace("\n", " ").strip()
+
+            # parse "00:00:01,200 --> 00:00:03,400"
+            match = re.match(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})", time_line)
+            if match:
+                start_str, end_str = match.groups()
+                start_ass = _srt_time_to_ass_time(start_str)
+                end_ass = _srt_time_to_ass_time(end_str)
+
+                subs.append((start_ass, end_ass, full_text))
+
+    # 3) Create the [Events] lines from these subs
+    #    Basic format: 
+    #    Dialogue: 0,<start>,<end>,Default,,0,0,0,,Hello world
+    # We'll use the "Default" style from the template [V4+ Styles]
+    event_lines = []
+    event_lines.append("[Events]\n")
+    event_lines.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+
+    for (start, end, text) in subs:
+        # e.g.: "Dialogue: 0,0:00:01.20,0:00:03.40,Default,,0,0,0,,Some text"
+        line = f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n"
+        event_lines.append(line)
+
+    # 4) Combine header_lines + event_lines => output_ass_path
+    with open(output_ass_path, 'w', encoding='utf-8') as f:
+        for line in header_lines:
+            f.write(line)
+        for line in event_lines:
+            f.write(line)
+
+
+def _srt_time_to_ass_time(srt_time: str) -> str:
+    """
+    Convert 'HH:MM:SS,mmm' => 'H:MM:SS.xx' for .ass Dialogue
+    e.g. '00:01:02,250' => '0:01:02.25'
+    """
+    # parse with datetime or do manual splits
+    # Quick approach:
+    h, m, s_ms = srt_time.split(":")
+    s, ms = s_ms.split(",")
+    hours = int(h)
+    mins = int(m)
+    secs = int(s)
+    msecs = int(ms)
+
+    # Convert total to seconds + fraction
+    # Then reformat as e.g. 0:00:05.07
+    td = datetime.timedelta(hours=hours, minutes=mins, seconds=secs, milliseconds=msecs)
+    total_seconds = td.total_seconds()
+
+    # Build "H:MM:SS.xx"
+    # e.g. hours might be e.g. 0, 1, etc. 
+    # We keep it minimal, e.g. if hours=0 => "0:01:02.25"
+    # We'll do two decimal places for fraction
+    hours_part = int(total_seconds // 3600)
+    remainder = total_seconds % 3600
+    mins_part = int(remainder // 60)
+    secs_part = remainder % 60
+
+    return f"{hours_part}:{mins_part:02d}:{secs_part:05.2f}"
+
+
+def burn_in_ass_captions(input_video: str, ass_file: str, output_video: str):
+    """
+    Use ffmpeg to burn a static .ass stylesheet (and potentially the transcript lines)
+    into the final video frames.
+    """
+    logger.info(f"Burning .ass subtitles from {ass_file} into {input_video} => {output_video}")
+
+    # Debugging: Verify file exists and can be read
+    if not os.path.exists(ass_file):
+        raise FileNotFoundError(f"The ASS file '{ass_file}' does not exist.")
+    logger.info(f"Using ASS file: {ass_file}")
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_video,
+        "-vf", (
+            f"subtitles={ass_file}:force_style='"
+            "Alignment=10,"
+            "Outline=5,"
+            "OutlineColour=&H000000,"
+            "Shadow=3,"
+        ),
+        "-c:a", "copy",
+        output_video
+    ]
+
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        logger.error(f"Error burning in .ass subtitles: {result.stderr}")
+        raise RuntimeError("Failed to burn .ass subtitles via ffmpeg.")
+
+    logger.info("ASS subtitles burned successfully.")

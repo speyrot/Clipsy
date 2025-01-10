@@ -1,0 +1,23 @@
+[Script Info]
+; "Fancy TikTok-like subtitles"
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+Collisions: Normal
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, \
+ Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, \
+ Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Anton,150,&H00FFFF,&HFF0000,&H000000,&H80000000,\
+ 1,0,0,0,100,100,0,0,3,10,3,10,0,0,0,1
+
+; Key changes:
+; OutlineColour = Black (&H000000)
+; Outline = 10 (thicker black outline)
+; Alignment = 10 (center horizontally and vertically)
+; MarginV = 960 (centered vertically for 1080x1920 videos)
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+; Text lines dynamically added.
