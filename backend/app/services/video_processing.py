@@ -20,6 +20,7 @@ import subprocess
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import uuid
+import whisper
 
 # NEW IMPORTS for S3 handling
 from app.utils.s3_utils import (
@@ -66,8 +67,8 @@ def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
             db.close()
 
 @celery.task(name="app.services.video_processing.process_video_task")
-def process_video_task(video_id: int, job_id: int):
-    logger.info(f"Starting process_video_task for video_id={video_id}, job_id={job_id}")
+def process_video_task(video_id: int, job_id: int, auto_captions: bool = False):
+    logger.info(f"Starting process_video_task for video_id={video_id}, job_id={job_id}, auto_captions={auto_captions}")
 
     with SessionLocal() as db:
         try:
@@ -227,13 +228,22 @@ def process_video_task(video_id: int, job_id: int):
             if not local_processed_path:
                 raise ValueError("Failed to compile the processed video.")
 
-            # 3. After finishing, upload the final processed video
+            # 3. Add auto captions if requested
+            if auto_captions:
+                srt_path = generate_srt_with_whisper(local_processed_path)
+                local_captioned_path = local_processed_path.rsplit('.', 1)[0] + '_with_captions.mp4'
+                
+                burn_in_captions(local_processed_path, srt_path, local_captioned_path)
+                delete_local_file(local_processed_path)
+                local_processed_path = local_captioned_path
+
+            # 4. After finishing, upload the final processed video
             processed_filename = f"{uuid.uuid4()}_cfr_processed.mp4"
             s3_key_processed = f"videos/{processed_filename}"
             s3_url_processed = upload_file_to_s3(local_processed_path, s3_key_processed)
             logger.info(f"Uploaded final processed video to S3: {s3_url_processed}")
 
-            # 4. Store it in processed_path
+            # 5. Store it in processed_path
             job.video.processed_path = s3_url_processed  # store final S3 URL
             job.video.status = VideoStatus.completed
             job.status = JobStatus.completed
@@ -266,3 +276,55 @@ def load_speakers_for_video(db: Session, video_id: int) -> list:
     logger.info(f"Loaded {len(speaker_data)} speakers for video {video_id}")
     logger.info(f"Speaker data mapping: {[(s[0], s[1]) for s in speaker_data]}")
     return speaker_data
+
+def generate_srt_with_whisper(video_path: str) -> str:
+    """
+    Run Whisper on `video_path`, produce an .srt file, and return its path.
+    """
+    model = whisper.load_model("base")
+    logger.info("Running Whisper transcription... might take a bit.")
+    result = model.transcribe(video_path)
+    
+    srt_path = video_path.rsplit('.', 1)[0] + '.srt'
+    with open(srt_path, 'w', encoding='utf-8') as f:
+        for i, seg in enumerate(result['segments'], start=1):
+            start = seg['start']
+            end = seg['end']
+            text = seg['text'].strip()
+            
+            start_srt = to_srt_timestamp(start)
+            end_srt = to_srt_timestamp(end)
+            
+            f.write(f"{i}\n{start_srt} --> {end_srt}\n{text}\n\n")
+    
+    logger.info(f"SRT file saved at {srt_path}")
+    return srt_path
+
+def to_srt_timestamp(seconds: float) -> str:
+    """Helper to convert 12.345 to HH:MM:SS,mmm for SRT."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds - int(seconds)) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+def burn_in_captions(input_video: str, srt_file: str, output_video: str):
+    """
+    Use ffmpeg to burn SRT into the video frames.
+    """
+    logger.info(f"Burning captions from {srt_file} into {input_video} => {output_video}")
+    
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_video,
+        "-vf", f"subtitles='{srt_file}'",
+        "-c:a", "copy",
+        output_video
+    ]
+    
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        logger.error(f"Error burning in captions: {result.stderr}")
+        raise RuntimeError("Failed to burn captions via ffmpeg.")
+    
+    logger.info("Captions burned successfully.")

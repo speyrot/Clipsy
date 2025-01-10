@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.models import Video, ProcessingJob, JobStatus, JobType
 from app.services.video_processing import process_video_task
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ProcessRequest(BaseModel):
     video_id: int
-    selected_speakers: List[int]  # List of Speaker IDs
+    selected_speakers: List[int]
 
 @router.post("/process_video", summary="Initiate Video Processing")
 async def process_video_endpoint(request: ProcessRequest, db: Session = Depends(get_db)):
@@ -57,6 +57,7 @@ async def process_video_endpoint(request: ProcessRequest, db: Session = Depends(
 
 class SimpleProcessRequest(BaseModel):
     video_id: int
+    auto_captions: Optional[bool] = False
 
 @router.post("/process_video_simple")
 async def process_video_simple(req: SimpleProcessRequest, db: Session = Depends(get_db)):
@@ -74,5 +75,5 @@ async def process_video_simple(req: SimpleProcessRequest, db: Session = Depends(
     db.commit()
     db.refresh(processing_job)
 
-    process_video_task.delay(video.id, processing_job.id)
+    process_video_task.delay(video.id, processing_job.id, req.auto_captions)
     return {"job_id": processing_job.id}

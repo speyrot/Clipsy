@@ -114,19 +114,26 @@ function CreatePage() {
   // Config modal: finalize processing
   // -------------------------------------------------
   const handleConfigSave = async (videoId, config) => {
-    setVideoConfigs((prev) => ({
-      ...prev,
+    const updatedConfigs = {
+      ...videoConfigs,
       [videoId]: config,
-    }));
+    };
+    
+    setVideoConfigs(updatedConfigs);
 
     if (currentVideoIndex === selectedVideos.size - 1) {
       setShowConfigModal(false);
-
+  
+      // Use updatedConfigs, not videoConfigs
       for (const vid of Array.from(selectedVideos)) {
         const video = uploadedVideos.find((v) => v.id === vid);
-        if (video) await handleProcessVideo(video);
+        if (video) {
+          const configForThisVideo = updatedConfigs[vid];
+          // <-- This should no longer be undefined
+          await handleProcessVideo(video, configForThisVideo);
+        }
       }
-
+  
       setSelectedVideos(new Set());
       setCurrentVideoIndex(0);
     } else {

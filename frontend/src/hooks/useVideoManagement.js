@@ -1,3 +1,5 @@
+// frontend/src/hooks/useVideoManagement.js
+
 import { useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
@@ -32,7 +34,7 @@ export const useVideoManagement = () => {
     if (processedVideo && !processedVideos.some(v => v.id === videoId)) {
       const newProcessedVideo = {
         ...processedVideo,
-        processedUrl: processedPath,
+        processed_path: processedPath,
         filename: `Processed_${processedVideo.filename}`
       };
       
@@ -48,10 +50,11 @@ export const useVideoManagement = () => {
   }, [uploadedVideos, processedVideos]);
 
   // Handle video processing
-  const handleProcessVideo = async (video) => {
+  const handleProcessVideo = async (video, config) => {
     try {
       const response = await axios.post("http://127.0.0.1:8000/process_video_simple", {
         video_id: video.id,
+        auto_captions: config.autoCaptions ?? false,
       });
       
       const toastId = toast.loading('Processing video...', { duration: Infinity });
