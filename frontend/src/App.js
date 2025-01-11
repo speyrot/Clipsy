@@ -10,6 +10,7 @@ import CalendarPage from './pages/CalendarPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   // Initialize state from localStorage
@@ -64,6 +65,14 @@ function App() {
           element={
             <ProtectedRoute>
               <CalendarPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />

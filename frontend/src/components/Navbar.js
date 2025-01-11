@@ -1,10 +1,23 @@
 // frontend/src/components/Navbar.js
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 function Navbar({ setToken }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Determine if nav link is active
   const isActive = (path) => {
@@ -26,6 +39,7 @@ function Navbar({ setToken }) {
     localStorage.removeItem('access_token');
     setToken('');
     navigate('/signin'); // go back to sign-in page
+    setIsDropdownOpen(false);
   };
 
   return (
@@ -88,20 +102,38 @@ function Navbar({ setToken }) {
           </svg>
         </button>
 
-        {/* Avatar */}
-        <img
-          src="https://via.placeholder.com/40"
-          alt="User Avatar"
-          className="w-9 h-9 rounded-full object-cover"
-        />
+        {/* Avatar with Dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center focus:outline-none"
+          >
+            <img
+              src="https://via.placeholder.com/40"
+              alt="User Avatar"
+              className="w-9 h-9 rounded-full object-cover hover:ring-2 hover:ring-purple-500 transition-all"
+            />
+          </button>
 
-        {/* Logout button */}
-        <button
-          onClick={handleLogout}
-          className="bg-red-500 text-white px-4 py-2 rounded"
-        >
-          Logout
-        </button>
+          {/* Dropdown Menu */}
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+              <Link
+                to="/settings"
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => setIsDropdownOpen(false)}
+              >
+                Settings
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+              >
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
