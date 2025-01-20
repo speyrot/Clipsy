@@ -1,9 +1,11 @@
-# app/models/user.py
+# backend/app/models/user.py
 
 import enum
 from sqlalchemy import Column, Integer, String, Enum
 from sqlalchemy.orm import relationship
 from .base import Base
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 class SubscriptionPlan(enum.Enum):
     free = "FREE"
@@ -12,7 +14,7 @@ class SubscriptionPlan(enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Basic info
     first_name = Column(String, nullable=True)

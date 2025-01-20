@@ -3,6 +3,7 @@
 import React, { useState, useId } from 'react';
 import axiosInstance from '../utils/axios';
 import { toast } from 'react-hot-toast';
+import { supabase } from '../utils/supabaseClient';
 
 const UploadComponent = ({ onUploadComplete, inputId }) => {
   const [isUploading, setIsUploading] = useState(false);
@@ -15,6 +16,16 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
   const handleFileChange = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Check for both tokens
+    const backendToken = localStorage.getItem('backend_token');
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!backendToken || !session) {
+      toast.error('Please log in to upload videos');
+      window.location.href = '/login';
+      return;
+    }
 
     const formData = new FormData();
     formData.append('file', file);
@@ -31,6 +42,7 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${backendToken}`
           },
         }
       );
@@ -53,12 +65,39 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
 
       setIsUploading(false);
     } catch (error) {
-      console.error('Error during upload:', error);
+      console.error('Error during upload:', error.response || error);
       toast.dismiss(loadingToast);
-      toast.error('An error occurred during the upload', {
-        duration: 4000,
-        position: 'bottom-right',
-      });
+      
+      // More specific error messages
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please log in again');
+        // Get a fresh token before redirecting
+        try {
+          const response = await fetch('http://localhost:8000/auth/signin', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              access_token: session.access_token
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('backend_token', data.token);
+            // Retry the upload instead of redirecting
+            handleFileChange(event);
+            return;
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing token:', refreshError);
+        }
+        window.location.href = '/login';
+      } else {
+        toast.error(error.response?.data?.detail || 'An error occurred during the upload');
+      }
+      
       setIsUploading(false);
     }
   };

@@ -46,7 +46,7 @@ def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
             if not processing_job:
                 raise Exception(f"ProcessingJob with ID {processing_job_id} not found")
 
-            processing_job.status = JobStatus.in_progress
+            processing_job.status = JobStatus.IN_PROGRESS
             db.commit()
 
             detect_and_store_speakers(video_id=video_id, file_path=file_path, db=db, frame_skip=25)
@@ -54,7 +54,7 @@ def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
             logger.info(f"Speaker (person) detection completed for video_id={video_id}")
 
             processing_job = db.query(ProcessingJob).filter(ProcessingJob.id == processing_job_id).first()
-            processing_job.status = JobStatus.completed
+            processing_job.status = JobStatus.COMPLETED
             db.commit()
 
             logger.info(f"ProcessingJob ID {processing_job.id} status updated to completed")
@@ -64,7 +64,7 @@ def detect_speakers_task(video_id: int, file_path: str, processing_job_id: int):
             db.rollback()
             processing_job = db.query(ProcessingJob).filter(ProcessingJob.id == processing_job_id).first()
             if processing_job:
-                processing_job.status = JobStatus.failed
+                processing_job.status = JobStatus.FAILED
                 db.commit()
             raise e
         finally:
@@ -80,9 +80,9 @@ def process_video_task(video_id: int, job_id: int, auto_captions: bool = False):
             if not job:
                 raise ValueError(f"No ProcessingJob found with ID: {job_id}")
 
-            # Mark job as in_progress
-            job.status = JobStatus.in_progress
-            job.video.status = VideoStatus.processing
+            # Mark job as IN_PROGRESS
+            job.status = JobStatus.IN_PROGRESS
+            job.video.status = VideoStatus.PROCESSING
             db.commit()
 
             # This is the S3 URL we stored in upload_path
@@ -256,8 +256,8 @@ def process_video_task(video_id: int, job_id: int, auto_captions: bool = False):
 
             # 5. Store it in processed_path
             job.video.processed_path = s3_url_processed  # store final S3 URL
-            job.video.status = VideoStatus.completed
-            job.status = JobStatus.completed
+            job.video.status = VideoStatus.PROCESSED
+            job.status = JobStatus.COMPLETED
             db.commit()
 
             logger.info(f"Video ID {video_id} marked completed. processed_video_path = {s3_url_processed}")
@@ -271,8 +271,8 @@ def process_video_task(video_id: int, job_id: int, auto_captions: bool = False):
             db.rollback()
             job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
             if job:
-                job.status = JobStatus.failed
-                job.video.status = VideoStatus.failed
+                job.status = JobStatus.FAILED
+                job.video.status = VideoStatus.FAILED
                 db.commit()
             raise e
         finally:

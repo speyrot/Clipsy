@@ -20,8 +20,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import your Base class
+# Import your Base class and all models here
 from app.models.base import Base
+from app.models.task import Task, Tag
+from app.models.user import User
+from app.models.video import Video
+from app.models.processing_job import ProcessingJob
+
 
 # Set target_metadata for 'autogenerate' to work
 target_metadata = Base.metadata

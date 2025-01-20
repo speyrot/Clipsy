@@ -1,27 +1,31 @@
-# app/models/video.py
+# backend/app/models/video.py
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-import enum
-from .base import Base
+from app.database import Base
+from enum import Enum
 
-class VideoStatus(enum.Enum):
-    uploaded = "uploaded"
-    processing = "processing"
-    completed = "completed"
-    failed = "failed"
+class VideoStatus(str, Enum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
 
 class Video(Base):
     __tablename__ = "videos"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    upload_path = Column(String, nullable=True)
-    processed_path = Column(String, nullable=True)
     name = Column(String, nullable=True)
+    upload_path = Column(String, nullable=False)
+    processed_path = Column(String, nullable=True)
     thumbnail_url = Column(String, nullable=True)
-
-    status = Column(Enum(VideoStatus), default=VideoStatus.uploaded)
+    status = Column(
+        SQLEnum(VideoStatus, name="videostatus", values_callable=lambda x: [status.value for status in VideoStatus]),
+        default=VideoStatus.UPLOADED,
+        nullable=False
+    )
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="videos")
     speakers = relationship("Speaker", back_populates="video")

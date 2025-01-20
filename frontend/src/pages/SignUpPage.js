@@ -1,100 +1,181 @@
 // frontend/src/pages/SignUpPage.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 function SignUpPage() {
   const navigate = useNavigate();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    firstName: '',
+    lastName: '',
+    username: ''
+  });
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
   const handleSignUp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setLoading(true);
+
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMsg('Passwords do not match');
+      setLoading(false);
+      return;
+    }
 
     try {
-      const response = await fetch('http://localhost:8000/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          first_name: firstName, 
-          last_name: lastName, 
-          email, 
-          password 
-        })
+      const response = await axios.post('http://localhost:8000/auth/signup', {
+        email: formData.email,
+        password: formData.password,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.username
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        setErrorMsg(errData.detail || 'Sign up failed');
-        return;
+      if (response.data) {
+        alert('Account created successfully! Please sign in.');
+        navigate('/login');
       }
-
-      // On success, navigate to sign-in or auto sign-in
-      navigate('/signin');
     } catch (error) {
       console.error('Sign up error:', error);
-      setErrorMsg('An error occurred. Please try again.');
+      setErrorMsg(error.response?.data?.detail || 'Failed to create account');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gray-100">
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 py-6">
       <form 
         onSubmit={handleSignUp} 
-        className="p-6 bg-white rounded shadow-md"
-        style={{ width: '300px' }}
+        className="p-6 bg-white rounded shadow-md w-full max-w-md"
       >
-        <h2 className="text-xl mb-4">Sign Up</h2>
+        <h2 className="text-2xl font-bold mb-6 text-center">Create Account</h2>
 
-        {errorMsg && <p className="text-red-500 mb-2">{errorMsg}</p>}
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {errorMsg}
+          </div>
+        )}
 
-        <label className="block mb-2">First Name</label>
-        <input
-          type="text"
-          className="border p-2 w-full mb-4"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-        />
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              First Name
+            </label>
+            <input
+              type="text"
+              name="firstName"
+              value={formData.firstName}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+              required
+              disabled={loading}
+            />
+          </div>
 
-        <label className="block mb-2">Last Name</label>
-        <input
-          type="text"
-          className="border p-2 w-full mb-4"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-        />
+          <div>
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              Last Name
+            </label>
+            <input
+              type="text"
+              name="lastName"
+              value={formData.lastName}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+              required
+              disabled={loading}
+            />
+          </div>
+        </div>
 
-        <label className="block mb-2">Email</label>
-        <input
-          type="email"
-          className="border p-2 w-full mb-4"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Username
+          </label>
+          <input
+            type="text"
+            name="username"
+            value={formData.username}
+            onChange={handleChange}
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+            required
+            disabled={loading}
+          />
+        </div>
 
-        <label className="block mb-2">Password</label>
-        <input
-          type="password"
-          className="border p-2 w-full mb-4"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Email
+          </label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+            required
+            disabled={loading}
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Password
+          </label>
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+            required
+            disabled={loading}
+          />
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Confirm Password
+          </label>
+          <input
+            type="password"
+            name="confirmPassword"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+            required
+            disabled={loading}
+          />
+        </div>
 
         <button 
-          type="submit"
-          className="bg-blue-500 text-white px-4 py-2 rounded w-full"
+          type="submit" 
+          className="w-full bg-blue-500 text-white p-3 rounded font-bold hover:bg-blue-600 focus:outline-none focus:shadow-outline"
+          disabled={loading}
         >
-          Sign Up
+          {loading ? 'Creating Account...' : 'Sign Up'}
         </button>
 
-        <p className="mt-4 text-sm">
+        <p className="mt-4 text-center text-sm text-gray-600">
           Already have an account?{' '}
           <span 
-            className="text-blue-500 cursor-pointer"
-            onClick={() => navigate('/signin')}
+            className="text-blue-500 cursor-pointer hover:text-blue-600"
+            onClick={() => navigate('/login')}
           >
             Sign In
           </span>

@@ -169,51 +169,42 @@ function PlanPage() {
   // ---------------------------
   const deleteTask = async (taskId) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!response.ok) {
+      // Use axiosInstance for the DELETE request
+      const response = await axiosInstance.delete(`/tasks/${taskId}`);
+      if (response.status === 200) {
+        // Remove from local state
+        setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      } else {
         console.error('Failed to delete task');
-        return;
       }
-      // Remove from local state
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
     } catch (error) {
       console.error('Error deleting task:', error);
     }
-  };
+  };  
 
   // ---------------------------
   // 5. Update Task Status (for DnD)
   // ---------------------------
   const updateTaskStatus = async (taskId, newStatus) => {
     try {
-      const token = localStorage.getItem('access_token');
       const payload = { status: newStatus };
-
-      const response = await fetch(`http://localhost:8000/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
+  
+      // Use axiosInstance for consistency
+      const response = await axiosInstance.put(`/tasks/${taskId}`, payload);
+  
+      if (response.status === 200) {
+        const updatedTask = response.data;
+        // Update local state
+        setTasks((prev) =>
+          prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+        );
+      } else {
         console.error('Failed to update task status');
-        return;
       }
-      const updatedTask = await response.json();
-      // update local state
-      setTasks((prev) =>
-        prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-      );
     } catch (error) {
       console.error('Error updating task status:', error);
     }
-  };
+  };  
 
   // ---------------------------
   // 6. Drag & Drop => onDragEnd
@@ -290,41 +281,39 @@ function PlanPage() {
   // For saving changes to an existing task
   const updateTask = async () => {
     if (!editingTask) return;
+  
     try {
-      const token = localStorage.getItem('access_token');
       // Convert selectedTags to actual names
       const tagNames = selectedTags.map((tagId) => {
         const found = userTags.find((t) => t.id === tagId);
         return found ? found.name : tagId;
       });
+  
       const payload = {
         title: newTitle,
         description: newDescription,
         status,
         tags: tagNames,
       };
-
-      const response = await fetch(`http://localhost:8000/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
+  
+      // Use axiosInstance for the PUT request
+      const response = await axiosInstance.put(`/tasks/${editingTask.id}`, payload);
+  
+      if (response.status === 200) {
+        const updatedTask = response.data;
+        // Update local state
+        setTasks((prev) =>
+          prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+        );
+        closeModal();
+      } else {
         console.error('Failed to update task');
-        return;
       }
-      const updatedTask = await response.json();
-      setTasks((prev) =>
-        prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-      );
-      closeModal();
     } catch (error) {
       console.error('Error updating task:', error);
     }
   };
+  
 
   // ---------------------------
   // 9. Create new tag locally if none matches
@@ -349,30 +338,25 @@ function PlanPage() {
   // Add this new function to handle tag deletion:
   const deleteUserTag = async (tagId) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const tagToDelete = userTags.find(t => t.id === tagId);
+      const tagToDelete = userTags.find((t) => t.id === tagId);
       if (!tagToDelete) return;
-
-      const response = await fetch(`http://localhost:8000/tags/${tagToDelete.name}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
+  
+      // Use axiosInstance for the DELETE request
+      const response = await axiosInstance.delete(`/tags/${tagToDelete.name}`);
+  
+      if (response.status === 200) {
+        // Remove from local state
+        setUserTags((prev) => prev.filter((t) => t.id !== tagId));
+        // Remove from selected tags if it was selected
+        setSelectedTags((prev) => prev.filter((t) => t !== tagId));
+      } else {
         console.error('Failed to delete tag');
-        return;
       }
-
-      // Remove from local state
-      setUserTags(prev => prev.filter(t => t.id !== tagId));
-      // Remove from selected tags if it was selected
-      setSelectedTags(prev => prev.filter(t => t !== tagId));
     } catch (error) {
       console.error('Error deleting tag:', error);
     }
   };
+  
 
   // Add this to your useEffect to load saved tag colors from localStorage
   useEffect(() => {

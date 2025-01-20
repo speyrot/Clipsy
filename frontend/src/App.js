@@ -1,7 +1,9 @@
 // frontend/src/App.js
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { supabase } from './utils/supabaseClient';
 import Navbar from './components/Navbar';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 import DashboardPage from './pages/DashboardPage';
 import CreatePage from './pages/CreatePage';
@@ -9,35 +11,91 @@ import PlanPage from './pages/PlanPage';
 import CalendarPage from './pages/CalendarPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
-import ProtectedRoute from './components/ProtectedRoute';
 import SettingsPage from './pages/SettingsPage';
 
-function App() {
-  // Initialize state from localStorage
-  const [token, setToken] = useState(localStorage.getItem('access_token') || '');
+console.log('Environment check:', {
+  url: process.env.REACT_APP_SUPABASE_URL,
+  hasKey: !!process.env.REACT_APP_SUPABASE_ANON_KEY
+});
 
-  // Listen for sign in changes via localStorage (optional but can help if multiple tabs)
+function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const onStorageChange = () => {
-      setToken(localStorage.getItem('access_token') || '');
-    };
-    window.addEventListener('storage', onStorageChange);
-    return () => window.removeEventListener('storage', onStorageChange);
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log("Initial session:", session);
+      if (session?.access_token) {
+        try {
+          const response = await fetch('http://localhost:8000/auth/signin', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              access_token: session.access_token
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('backend_token', data.token);
+          } else {
+            // Clear session if backend auth fails
+            localStorage.removeItem('backend_token');
+            await supabase.auth.signOut();
+          }
+        } catch (error) {
+          console.error('Complete error:', error);
+          localStorage.removeItem('backend_token');
+          await supabase.auth.signOut();
+        }
+      }
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (!session) {
+        localStorage.removeItem('backend_token');
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <Router>
-      {/* Conditionally render the Navbar if we have a token in state */}
-      {token && <Navbar setToken={setToken} />}
+      {session && <Navbar />}
 
       <Routes>
         {/* Public Routes */}
-        <Route path="/signin" element={<SignInPage setToken={setToken} />} />
-        <Route path="/signup" element={<SignUpPage />} />
+        <Route
+          path="/login"
+          element={session ? <Navigate to="/dashboard" /> : <SignInPage />}
+        />
+        <Route
+          path="/signup"
+          element={session ? <Navigate to="/dashboard" /> : <SignUpPage />}
+        />
 
         {/* Protected Routes */}
         <Route
           path="/"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/dashboard" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <DashboardPage />

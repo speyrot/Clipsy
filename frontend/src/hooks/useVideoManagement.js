@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import axios from 'axios';
-import { extractBaseName, extractExtensionFromFilename } from '../constants';
+import axiosInstance from '../utils/axios'; // Import the configured axios instance
+import { supabase } from '../utils/supabaseClient';
+import { useNavigate } from 'react-router-dom';
 
 export const useVideoManagement = () => {
+  const navigate = useNavigate();
   const [uploadedVideos, setUploadedVideos] = useState([]);
   const [processedVideos, setProcessedVideos] = useState([]);
   const [processingJobs, setProcessingJobs] = useState(new Map());
@@ -52,10 +54,13 @@ export const useVideoManagement = () => {
   // Handle video processing
   const handleProcessVideo = async (video, config) => {
     try {
-      const response = await axios.post("http://127.0.0.1:8000/process_video_simple", {
-        video_id: video.id,
-        auto_captions: config.autoCaptions ?? false,
-      });
+      const response = await axiosInstance.post(
+        "/process_video_simple",
+        {
+          video_id: video.id,
+          auto_captions: config.autoCaptions ?? false,
+        }
+      );
       
       const toastId = toast.loading('Processing video...', { duration: Infinity });
       localStorage.setItem(`processing_toast_${response.data.job_id}`, toastId);
@@ -76,16 +81,11 @@ export const useVideoManagement = () => {
   const handleDeleteVideo = async (video, type) => {
     try {
       let part = determineDeletePart(video, type, uploadedVideos, processedVideos);
-      const token = localStorage.getItem('access_token');
-      const resp = await fetch(`http://127.0.0.1:8000/videos/${video.id}?part=${part}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+      const resp = await axiosInstance.delete(`/videos/${video.id}`, {
+        params: { part },
       });
 
-      if (!resp.ok) throw new Error(await resp.text());
-
-      const result = await resp.json();
-      toast.success(result.message);
+      toast.success(resp.data.message);
       updateVideoLists(video.id, part);
 
     } catch (err) {
@@ -98,14 +98,11 @@ export const useVideoManagement = () => {
   const handleDownloadVideo = async (video, type) => {
     try {
       const part = type === 'upload' ? 'upload' : 'processed';
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/videos/${video.id}/download?part=${part}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await axiosInstance.get(`/videos/${video.id}/download`, {
+        params: { part },
       });
 
-      if (!res.ok) throw new Error(await res.text());
-
-      const { download_url } = await res.json();
+      const { download_url } = res.data;
 
       // Create an invisible anchor element to trigger the download
       const link = document.createElement('a');
@@ -127,19 +124,10 @@ export const useVideoManagement = () => {
     if (!renameTargetVideo) return;
 
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://127.0.0.1:8000/videos/${renameTargetVideo.id}/rename`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ name: newName })
+      const response = await axiosInstance.patch(`/videos/${renameTargetVideo.id}/rename`, {
+        name: newName
       });
 
-      if (!response.ok) throw new Error('Rename failed');
-
-      await response.json();
       updateVideoNames(renameTargetVideo.id, newName);
       closeRenameModal();
 
@@ -182,25 +170,22 @@ export const useVideoManagement = () => {
     setFileExtension('.mp4');
   };
 
+  const handleAuthError = useCallback(() => {
+    localStorage.removeItem('backend_token');
+    navigate('/signin');
+  }, [navigate]);
+
   const fetchUserVideos = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/videos/', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axiosInstance.get('/videos/');
       
-      if (!res.ok) {
-        console.error("Failed to fetch user's videos");
-        return;
-      }
-      
-      const data = await res.json();
+      const data = response.data;
       const newUploads = [];
       const newProcessed = [];
 
       data.forEach((item) => {
         const fallbackFilename =
-          item.filename ||
+          item.name ||
           item.upload_path?.split('/').pop() ||
           `Video_${item.id}`;
 
@@ -226,6 +211,7 @@ export const useVideoManagement = () => {
       setProcessedVideos(newProcessed);
     } catch (err) {
       console.error('Error fetching user videos:', err);
+      toast.error('Failed to load videos. Please try again.');
     }
   }, []);
 

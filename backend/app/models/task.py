@@ -8,27 +8,25 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    Enum,
+    Enum as SQLEnum,
     ForeignKey,
     DateTime,
     func,
     Table
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base
+import uuid
 
-# --------------------------------------------------------------------
-# 1. Define an enum for TaskStatus
-# --------------------------------------------------------------------
+# Define an enum for TaskStatus
 class TaskStatus(enum.Enum):
     unassigned = "unassigned"
     todo = "todo"
     in_progress = "in_progress"
     done = "done"
 
-# --------------------------------------------------------------------
-# 2. The join table for many-to-many (Tasks <-> Tags)
-# --------------------------------------------------------------------
+# The join table for many-to-many (Tasks <-> Tags)
 task_tags = Table(
     "task_tags",
     Base.metadata,
@@ -36,40 +34,34 @@ task_tags = Table(
     Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
 )
 
-# --------------------------------------------------------------------
-# 3. SQLAlchemy Task model
-# --------------------------------------------------------------------
+# SQLAlchemy Task model
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)  # UUID type
     title = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    status = Column(Enum(TaskStatus), default=TaskStatus.todo)
+    description = Column(Text, nullable=False)  # Now not nullable
+    status = Column(SQLEnum(TaskStatus), default=TaskStatus.todo, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now(), nullable=False)
 
     user = relationship("User", back_populates="tasks")
     tags = relationship("Tag", secondary=task_tags, back_populates="tasks")
 
-# --------------------------------------------------------------------
-# 4. SQLAlchemy Tag model
-# --------------------------------------------------------------------
+# SQLAlchemy Tag model
 class Tag(Base):
     __tablename__ = "tags"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)  # UUID type
     name = Column(String, nullable=False)
 
     user = relationship("User", back_populates="tags")
     tasks = relationship("Task", secondary=task_tags, back_populates="tags")
 
-# --------------------------------------------------------------------
-# 5. Pydantic Schemas (all in the same file)
-# --------------------------------------------------------------------
+# Pydantic Schemas
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -90,4 +82,4 @@ class TaskRead(BaseModel):
     tags: List[str]
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2

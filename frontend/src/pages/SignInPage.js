@@ -1,40 +1,64 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../utils/supabaseClient';
 
-function SignInPage({ setToken }) {
+function SignInPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSignIn = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/auth/signin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (!response.ok) {
-        // e.g., 400 or 401 response => show error
-        const errData = await response.json();
-        setErrorMsg(errData.detail || 'Sign in failed');
-        return;
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      localStorage.setItem('access_token', data.access_token);
-      setToken(data.access_token);
-      
-      // redirect to dashboard or wherever
-      navigate('/');
+      if (data?.user) {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        console.log("Sending to backend:", {
+          access_token: session?.access_token
+        });
+
+        const response = await fetch('http://127.0.0.1:8000/auth/signin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: session?.access_token
+          })
+        });
+
+        const responseText = await response.text();
+        console.log("Backend response:", {
+          status: response.status,
+          body: responseText
+        });
+
+        if (!response.ok) {
+          throw new Error(responseText || 'Backend authentication failed');
+        }
+
+        const data = JSON.parse(responseText);
+        localStorage.setItem('backend_token', data.token);
+        navigate('/');
+      }
     } catch (error) {
       console.error('Sign in error:', error);
-      setErrorMsg('An error occurred. Please try again.');
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -55,6 +79,8 @@ function SignInPage({ setToken }) {
           className="border p-2 w-full mb-4"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          disabled={loading}
+          required
         />
 
         <label className="block mb-2">Password</label>
@@ -63,19 +89,22 @@ function SignInPage({ setToken }) {
           className="border p-2 w-full mb-4"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+          required
         />
 
         <button 
           type="submit" 
-          className="bg-blue-500 text-white px-4 py-2 rounded w-full"
+          className="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600 transition-colors"
+          disabled={loading}
         >
-          Sign In
+          {loading ? 'Signing in...' : 'Sign In'}
         </button>
 
-        <p className="mt-4 text-sm">
-          Don’t have an account?{' '}
+        <p className="mt-4 text-sm text-center">
+          Don't have an account?{' '}
           <span 
-            className="text-blue-500 cursor-pointer"
+            className="text-blue-500 cursor-pointer hover:text-blue-600"
             onClick={() => navigate('/signup')}
           >
             Sign Up

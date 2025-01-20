@@ -32,9 +32,9 @@ async def process_video_endpoint(request: ProcessRequest, db: Session = Depends(
     # Create a new ProcessingJob entry for video processing
     processing_job = ProcessingJob(
         video_id=video.id,
-        status=JobStatus.pending,
+        status=JobStatus.PENDING,
         progress=0.0,
-        job_type=JobType.video_processing
+        job_type=JobType.VIDEO_PROCESSING
     )
     db.add(processing_job)
     db.commit()
@@ -67,9 +67,9 @@ async def process_video_simple(req: SimpleProcessRequest, db: Session = Depends(
 
     processing_job = ProcessingJob(
         video_id=video.id,
-        status=JobStatus.pending,
+        status=JobStatus.PENDING,
         progress=0.0,
-        job_type=JobType.video_processing
+        job_type=JobType.VIDEO_PROCESSING
     )
     db.add(processing_job)
     db.commit()

@@ -1,20 +1,19 @@
 # backend/app/routes/video_routes.py
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List
 import logging
 import re
 from app.database import get_db
-from app.models.video import Video
+from app.models.video import Video, VideoStatus
 from app.models.user import User
 from app.dependencies import get_current_user
-from app.models.video import VideoStatus
 from app.utils.s3_utils import get_s3_client
 from app.config import settings
 from pydantic import BaseModel
 import os
-
+from uuid import UUID
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 logger = logging.getLogger(__name__)
@@ -25,25 +24,30 @@ class VideoRenameRequest(BaseModel):
     name: str
 
 @router.get("/", summary="List user's videos")
-def list_user_videos(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+async def get_videos(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Return all videos belonging to the current user."""
-    user_videos = db.query(Video).filter(Video.user_id == current_user.id).all()
-    # Optionally transform to a dict or Pydantic model
-    # for front-end convenience.
-    return [
-       {
-         "id": v.id,
-         "upload_path": v.upload_path,
-         "processed_path": v.processed_path,
-         "thumbnail_url": v.thumbnail_url,
-         "status": v.status.value if v.status else None, 
-         "name": v.name,
-       }
-       for v in user_videos
-    ]
+    try:
+        user_videos = db.query(Video).filter(Video.owner_id == current_user.id).all()
+        
+        return [
+            {
+                "id": v.id,
+                "upload_path": v.upload_path,
+                "processed_path": v.processed_path,
+                "thumbnail_url": v.thumbnail_url,
+                "status": v.status.value if v.status else None,
+                "name": v.name,
+            }
+            for v in user_videos
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching videos for user {current_user.id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 @router.delete("/{video_id}", summary="Delete the upload or processed video from the user's library.")
 def delete_video_part(
@@ -59,17 +63,16 @@ def delete_video_part(
 
     Steps:
       1) Look up the Video by ID
-      2) Check if current_user.id == video.user_id
+      2) Check if current_user.id == video.owner_id
       3) If part=upload => remove upload file from S3, set upload_path=None
       4) If part=processed => remove processed file from S3, set processed_path=None
       5) If both references are now None => remove the row + thumbnail
       6) Return success message or HTTP 404 if not found / not owned
     """
     video = db.query(Video).filter(Video.id == video_id).first()
-    if not video or video.user_id != current_user.id:
+    if not video or video.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Video not found or not owned by user")
 
-    s3_client = get_s3_client()
     bucket_name = settings.AWS_S3_BUCKET_NAME
 
     def delete_s3_object(url: str):
@@ -80,7 +83,11 @@ def delete_video_part(
         if match:
             key = match.group(1)
             logger.info(f"Deleting s3://{bucket_name}/{key}")
-            s3_client.delete_object(Bucket=bucket_name, Key=key)
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=key)
+                logger.info(f"Successfully deleted s3://{bucket_name}/{key}")
+            except Exception as e:
+                logger.error(f"Failed to delete s3://{bucket_name}/{key}: {str(e)}")
         else:
             logger.warning(f"Could not parse S3 key from URL: {url}")
 
@@ -102,10 +109,12 @@ def delete_video_part(
             delete_s3_object(video.thumbnail_url)
         db.delete(video)
         db.commit()
+        logger.info(f"Completely removed video ID {video.id}")
         return {"message": "Video entry removed completely."}
     else:
         # Just update the row. For example if the user only deleted the processed portion
         db.commit()
+        logger.info(f"Successfully removed '{part}' from video ID {video.id}")
         return {"message": f"Successfully removed '{part}' from video ID {video.id}."}
 
 @router.get("/{video_id}/download", summary="Download either the uploaded or processed video")
@@ -117,7 +126,7 @@ def download_video(
 ):
     """Generate a pre-signed S3 URL for download"""
     video = db.query(Video).filter(Video.id == video_id).first()
-    if not video or video.user_id != current_user.id:
+    if not video or video.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Video not found or not owned by user")
 
     if part == "upload":
@@ -156,6 +165,7 @@ def download_video(
         logger.error(f"Error creating presigned URL for {s3_url}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate download link")
 
+    logger.info(f"Generated presigned URL for video ID {video.id}")
     return {
         "download_url": presigned,
         "filename": download_filename
@@ -170,13 +180,15 @@ def rename_video(
 ):
     """Renames the video to a new name provided by the user."""
     video = db.query(Video).filter(Video.id == video_id).first()
-    if not video or video.user_id != current_user.id:
+    if not video or video.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Video not found or not owned by user")
 
+    old_name = video.name
     video.name = payload.name
     db.commit()
     db.refresh(video)
     
+    logger.info(f"Video ID {video.id} renamed from '{old_name}' to '{video.name}'")
     return {
         "id": video.id,
         "name": video.name,

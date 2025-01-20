@@ -1,4 +1,4 @@
-# app/models/base.py
+# backend/app/models/base.py
 
 from sqlalchemy.ext.declarative import declarative_base
 

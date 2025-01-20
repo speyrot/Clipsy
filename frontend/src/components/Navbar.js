@@ -1,8 +1,10 @@
 // frontend/src/components/Navbar.js
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '../utils/supabaseClient';
+import { toast } from 'react-hot-toast';
 
-function Navbar({ setToken }) {
+function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -34,12 +36,25 @@ function Navbar({ setToken }) {
       : "text-gray-500 hover:text-gray-900 pb-1 border-b-2 border-transparent";
   };
 
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    setToken('');
-    navigate('/signin'); // go back to sign-in page
-    setIsDropdownOpen(false);
+  // Updated logout handler
+  const handleLogout = async () => {
+    try {
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      // Clear backend token
+      localStorage.removeItem('backend_token');
+      
+      // Navigate to login
+      navigate('/login');
+      setIsDropdownOpen(false);
+      
+      toast.success('Logged out successfully');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to log out');
+    }
   };
 
   return (

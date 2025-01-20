@@ -1,20 +1,20 @@
-# app/models/processing_job.py
+# backend/app/models/processing_job.py
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 import enum
 from .base import Base
 
-class JobStatus(enum.Enum):
-    pending = "pending"
-    in_progress = "in_progress"
-    completed = "completed"
-    failed = "failed"
-    scenes_detected = "scenes_detected"
+class JobStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SCENES_DETECTED = "scenes_detected"
 
 class JobType(enum.Enum):
-    speaker_detection = "speaker_detection"
-    video_processing = "video_processing"
+    SPEAKER_DETECTION = "speaker_detection"
+    VIDEO_PROCESSING = "video_processing"
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
@@ -27,10 +27,16 @@ class ProcessingJob(Base):
         nullable=False
     )
     
-    status = Column(Enum(JobStatus), default=JobStatus.pending)
+    status = Column(
+        SQLEnum(JobStatus, name="jobstatus", values_callable=lambda x: [status.value for status in JobStatus]),
+        default=JobStatus.PENDING,
+        nullable=False
+    )
     progress = Column(Float, default=0.0)
-    job_type = Column(Enum(JobType), nullable=False)
+    job_type = Column(
+        SQLEnum(JobType, name="jobtype", values_callable=lambda x: [jt.value for jt in JobType]),
+        nullable=False
+    )
     processed_video_path = Column(String, nullable=True)
 
     video = relationship("Video", back_populates="processing_jobs")
-

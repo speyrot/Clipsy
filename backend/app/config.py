@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_S3_BUCKET_NAME: str
     AWS_S3_REGION: str = "us-east-1"
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+    SUPABASE_SERVICE_KEY: str 
+    JWT_SECRET: str
 
     class Config:
         env_file = ".env"  
