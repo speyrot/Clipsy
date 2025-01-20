@@ -695,35 +695,34 @@ function PlanPage() {
                                 }`
                               }
                             >
-                              {({ selected, disabled }) => {
-                                const colors = getTagColor(tag.name);
-                                return (
-                                  <div className="flex items-center justify-between group">
+                              {({ selected, disabled }) => (
+                                <div className="flex items-center justify-between group">
+                                  <div className="flex items-center flex-1">
                                     <span 
-                                      className={`${colors.bg} ${colors.text} px-2 py-0.5 rounded-full text-sm`}
+                                      className={`${getTagColor(tag.name).bg} ${getTagColor(tag.name).text} px-2 py-0.5 rounded-full text-sm`}
                                     >
                                       {tag.name}
                                     </span>
-                                    <div className="flex items-center space-x-2">
-                                      {selected && (
-                                        <span className="text-blue-600">✓</span>
-                                      )}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          deleteUserTag(tag.id);
-                                        }}
-                                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 transition-opacity"
-                                      >
-                                        <TrashIcon className="h-4 w-4" />
-                                      </button>
-                                    </div>
                                     {disabled && !selected && (
-                                      <span className="text-xs text-gray-500">Max tags reached</span>
+                                      <span className="text-xs text-gray-500 ml-2">Max reached</span>
                                     )}
                                   </div>
-                                );
-                              }}
+                                  <div className="flex items-center space-x-2">
+                                    {selected && (
+                                      <span className="text-blue-600">✓</span>
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteUserTag(tag.id);
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 transition-opacity"
+                                    >
+                                      <TrashIcon className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </ListboxOption>
                           ))}
 
