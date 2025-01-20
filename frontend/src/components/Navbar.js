@@ -23,10 +23,10 @@ function Navbar() {
 
   // Determine if nav link is active
   const isActive = (path) => {
-    if (path === '/' && location.pathname === '/') {
-      return true;
+    if (path === '/') {
+      return location.pathname === '/dashboard';
     }
-    return path !== '/' && location.pathname.startsWith(path);
+    return location.pathname.startsWith(path);
   };
 
   // Generate classes for nav links
@@ -71,7 +71,7 @@ function Navbar() {
         {/* Nav Links */}
         <ul className="flex items-center space-x-6">
           <li>
-            <Link to="/" className={getLinkClasses('/')}>
+            <Link to="/dashboard" className={getLinkClasses('/')}>
               Dashboard
             </Link>
           </li>
