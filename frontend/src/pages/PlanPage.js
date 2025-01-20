@@ -124,7 +124,7 @@ function PlanPage() {
     }
   };
 
-  // Fetch the user’s existing tags from GET /tags
+  // Fetch the user's existing tags from GET /tags
   const fetchUserTags = async () => {
     try {
       const response = await axiosInstance.get('/tags');
@@ -385,6 +385,16 @@ function PlanPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Moved Clear filters button before the Tag Filter */}
+          {selectedFilterTags.length > 0 && (
+            <button
+              onClick={() => setSelectedFilterTags([])}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              Clear filters
+            </button>
+          )}
+          
           {/* Tag Filter Example (Optional) */}
           <div className="relative">
             <Listbox value={selectedFilterTags} onChange={setSelectedFilterTags} multiple>
@@ -447,15 +457,6 @@ function PlanPage() {
               </Transition>
             </Listbox>
           </div>
-
-          {selectedFilterTags.length > 0 && (
-            <button
-              onClick={() => setSelectedFilterTags([])}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Clear filters
-            </button>
-          )}
 
           <button
             onClick={() => openModal('unassigned')}
