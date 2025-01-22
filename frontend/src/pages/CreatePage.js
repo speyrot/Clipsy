@@ -451,8 +451,6 @@ function CreatePage() {
           }
         />
       ))}
-
-      <Toaster />
     </>
   );
 }

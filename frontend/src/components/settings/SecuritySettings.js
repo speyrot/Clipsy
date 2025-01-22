@@ -2,8 +2,11 @@
 
 import React, { useState } from "react";
 import { toast } from "react-hot-toast";
+import { supabase } from "../../utils/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 const SecuritySettings = () => {
+  const navigate = useNavigate();
   const [currentEmail, setCurrentEmail] = useState('john.smith@example.com');
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -11,6 +14,7 @@ const SecuritySettings = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleEmailChange = async () => {
     try {
@@ -26,18 +30,83 @@ const SecuritySettings = () => {
 
   const handlePasswordChange = async () => {
     try {
-      if (newPassword !== confirmPassword) {
-        toast.error('Passwords do not match');
+      setLoading(true);
+
+      // Basic validation
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        toast.error('All password fields are required', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
         return;
       }
-      // TODO: Implement API call to change password
-      toast.success('Password updated successfully');
+
+      if (newPassword !== confirmPassword) {
+        toast.error('New passwords do not match', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        toast.error('New password must be at least 6 characters long', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      // First verify the current password
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user?.email) {
+        toast.error('Unable to verify current user', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      // Try to sign in with current password to verify it
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userData.user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        toast.error('Current password is incorrect', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      // If current password is correct, proceed with password update
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) throw updateError;
+
+      // Clear form and show success message
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setIsChangingPassword(false);
+      
+      toast.success('Password updated successfully', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
+
     } catch (error) {
-      toast.error('Failed to update password');
+      console.error('Password change error:', error);
+      toast.error(error.message || 'Failed to update password', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -95,7 +164,7 @@ const SecuritySettings = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-gray-900">Password</h3>
-              <p className="text-sm text-gray-500">Last changed 30 days ago</p>
+              <p className="text-sm text-gray-500">Update your password</p>
             </div>
             <button
               onClick={() => setIsChangingPassword(!isChangingPassword)}
@@ -146,9 +215,12 @@ const SecuritySettings = () => {
               <div className="flex justify-end">
                 <button
                   onClick={handlePasswordChange}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                  disabled={loading}
+                  className={`px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium 
+                    ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-purple-700'} 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500`}
                 >
-                  Update Password
+                  {loading ? 'Updating...' : 'Update Password'}
                 </button>
               </div>
             </div>

@@ -22,7 +22,11 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!backendToken || !session) {
-      toast.error('Please log in to upload videos');
+      toast.error('Please log in to upload videos', {
+        style: {
+          border: '2px solid #DC2626',
+        },
+      });
       window.location.href = '/login';
       return;
     }
@@ -31,7 +35,9 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
     formData.append('file', file);
 
     const loadingToast = toast.loading('Uploading video...', {
-      position: 'bottom-right',
+      style: {
+        border: '2px solid #6B7280',
+      },
     });
 
     try {
@@ -59,8 +65,9 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
 
       toast.dismiss(loadingToast);
       toast.success('Video uploaded successfully!', {
-        duration: 4000,
-        position: 'bottom-right',
+        style: {
+          border: '2px solid #9333EA',
+        },
       });
 
       setIsUploading(false);
@@ -68,9 +75,12 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
       console.error('Error during upload:', error.response || error);
       toast.dismiss(loadingToast);
       
-      // More specific error messages
       if (error.response?.status === 401) {
-        toast.error('Session expired. Please log in again');
+        toast.error('Session expired. Please log in again', {
+          style: {
+            border: '2px solid #DC2626',
+          },
+        });
         // Get a fresh token before redirecting
         try {
           const response = await fetch('http://localhost:8000/auth/signin', {
@@ -95,7 +105,11 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
         }
         window.location.href = '/login';
       } else {
-        toast.error(error.response?.data?.detail || 'An error occurred during the upload');
+        toast.error(error.response?.data?.detail || 'An error occurred during the upload', {
+          style: {
+            border: '2px solid #DC2626',
+          },
+        });
       }
       
       setIsUploading(false);

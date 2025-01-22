@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { supabase } from './utils/supabaseClient';
 import Navbar from './components/Navbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { Toaster } from 'react-hot-toast';
 
 import DashboardPage from './pages/DashboardPage';
 import CreatePage from './pages/CreatePage';
@@ -71,71 +72,107 @@ function App() {
   }
 
   return (
-    <Router>
-      {session && <Navbar />}
+    <>
+      <Router>
+        {session && <Navbar />}
 
-      <Routes>
-        {/* Public Routes */}
-        <Route
-          path="/login"
-          element={session ? <Navigate to="/dashboard" /> : <SignInPage />}
-        />
-        <Route
-          path="/signup"
-          element={session ? <Navigate to="/dashboard" /> : <SignUpPage />}
-        />
+        <Routes>
+          {/* Public Routes */}
+          <Route
+            path="/login"
+            element={session ? <Navigate to="/dashboard" /> : <SignInPage />}
+          />
+          <Route
+            path="/signup"
+            element={session ? <Navigate to="/dashboard" /> : <SignUpPage />}
+          />
 
-        {/* Protected Routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Navigate to="/dashboard" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/create"
-          element={
-            <ProtectedRoute>
-              <CreatePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/plan"
-          element={
-            <ProtectedRoute>
-              <PlanPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/calendar"
-          element={
-            <ProtectedRoute>
-              <CalendarPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/dashboard" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/create"
+            element={
+              <ProtectedRoute>
+                <CreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plan"
+            element={
+              <ProtectedRoute>
+                <PlanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <CalendarPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Router>
+      <Toaster
+        position="bottom-right"
+        gutter={8}
+        containerStyle={{
+          top: 40,
+          right: 40,
+          bottom: 40,
+        }}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: 'rgba(255, 255, 255, 0.9)',
+            color: '#1F2937',
+            padding: '16px',
+            borderRadius: '8px',
+            maxWidth: '400px',
+          },
+          success: {
+            style: {
+              border: '2px solid #9333EA', // Purple-600
+            },
+          },
+          error: {
+            style: {
+              border: '2px solid #DC2626', // Red-600
+            },
+          },
+          loading: {
+            style: {
+              border: '2px solid #6B7280', // Gray-500
+            },
+          },
+        }}
+      />
+    </>
   );
 }
 
