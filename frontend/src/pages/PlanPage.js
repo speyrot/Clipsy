@@ -15,6 +15,7 @@ import {
   ListboxOption
 } from '@headlessui/react';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
+import { toast } from 'react-hot-toast';
 
 // DRAG & DROP from @hello-pangea/dnd
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -159,8 +160,16 @@ function PlanPage() {
       const response = await axiosInstance.post('/tasks', payload);
       setTasks((prev) => [...prev, response.data]);
       closeModal();
+      toast.success('Task created successfully', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     } catch (error) {
       console.error('Error creating task:', error);
+      toast.error('Failed to create task', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     }
   };
 
@@ -169,16 +178,26 @@ function PlanPage() {
   // ---------------------------
   const deleteTask = async (taskId) => {
     try {
-      // Use axiosInstance for the DELETE request
       const response = await axiosInstance.delete(`/tasks/${taskId}`);
       if (response.status === 200) {
-        // Remove from local state
         setTasks((prev) => prev.filter((t) => t.id !== taskId));
+        toast.success('Task deleted successfully', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       } else {
         console.error('Failed to delete task');
+        toast.error('Failed to delete task', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       }
     } catch (error) {
       console.error('Error deleting task:', error);
+      toast.error('Failed to delete task', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     }
   };  
 
@@ -189,20 +208,30 @@ function PlanPage() {
     try {
       const payload = { status: newStatus };
   
-      // Use axiosInstance for consistency
       const response = await axiosInstance.put(`/tasks/${taskId}`, payload);
   
       if (response.status === 200) {
         const updatedTask = response.data;
-        // Update local state
         setTasks((prev) =>
           prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
         );
+        toast.success('Task status updated', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       } else {
         console.error('Failed to update task status');
+        toast.error('Failed to update task status', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       }
     } catch (error) {
       console.error('Error updating task status:', error);
+      toast.error('Failed to update task status', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     }
   };  
 
@@ -283,7 +312,6 @@ function PlanPage() {
     if (!editingTask) return;
   
     try {
-      // Convert selectedTags to actual names
       const tagNames = selectedTags.map((tagId) => {
         const found = userTags.find((t) => t.id === tagId);
         return found ? found.name : tagId;
@@ -296,21 +324,31 @@ function PlanPage() {
         tags: tagNames,
       };
   
-      // Use axiosInstance for the PUT request
       const response = await axiosInstance.put(`/tasks/${editingTask.id}`, payload);
   
       if (response.status === 200) {
         const updatedTask = response.data;
-        // Update local state
         setTasks((prev) =>
           prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
         );
         closeModal();
+        toast.success('Task updated successfully', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       } else {
         console.error('Failed to update task');
+        toast.error('Failed to update task', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       }
     } catch (error) {
       console.error('Error updating task:', error);
+      toast.error('Failed to update task', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     }
   };
   
@@ -328,6 +366,12 @@ function PlanPage() {
     setTagSearch('');
     // Assign a color to the new tag
     getTagColor(tagName);
+    
+    // Add success toast notification
+    toast.success(`Tag "${tagName}" created`, {
+      duration: 4000,
+      position: 'bottom-right',
+    });
   };
 
   // Filtered tags for the dropdown
@@ -349,11 +393,27 @@ function PlanPage() {
         setUserTags((prev) => prev.filter((t) => t.id !== tagId));
         // Remove from selected tags if it was selected
         setSelectedTags((prev) => prev.filter((t) => t !== tagId));
+        
+        // Add success toast notification
+        toast.success(`Tag "${tagToDelete.name}" deleted`, {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       } else {
         console.error('Failed to delete tag');
+        // Add error toast notification
+        toast.error('Failed to delete tag', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
       }
     } catch (error) {
       console.error('Error deleting tag:', error);
+      // Add error toast notification
+      toast.error('Failed to delete tag', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
     }
   };
   
