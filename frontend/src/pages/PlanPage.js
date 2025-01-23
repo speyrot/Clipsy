@@ -357,21 +357,41 @@ function PlanPage() {
   // 9. Create new tag locally if none matches
   // (You can also do a POST /tags to store in DB)
   // ---------------------------
-  const createNewTagLocally = (tagName) => {
-    // Use the full tag name as the ID, but encoded for safety
-    const newId = encodeURIComponent(tagName.toLowerCase());
-    const newObj = { id: newId, name: tagName };
-    setUserTags((prev) => [...prev, newObj]);
-    setSelectedTags((prev) => [...prev, newId]);
-    setTagSearch('');
-    // Assign a color to the new tag
-    getTagColor(tagName);
-    
-    // Add success toast notification
-    toast.success(`Tag "${tagName}" created`, {
-      duration: 4000,
-      position: 'bottom-right',
-    });
+  const createNewTagLocally = async (tagName) => {
+    try {
+      // Create tag using dedicated endpoint
+      const response = await axiosInstance.post('/tags', { 
+        name: tagName 
+      });
+      
+      if (response.status === 200 || response.status === 201) {
+        // Create tag object using the response data
+        const newObj = { 
+          id: response.data.id.toString(), // Convert numeric ID to string
+          name: response.data.name 
+        };
+        
+        // Update local state
+        setUserTags((prev) => [...prev, newObj]);
+        setSelectedTags((prev) => [...prev, newObj.id]);
+        setTagSearch('');
+        
+        // Assign a color to the new tag
+        getTagColor(tagName);
+        
+        // Add success toast notification
+        toast.success(`Tag "${tagName}" created`, {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+      }
+    } catch (error) {
+      console.error('Error creating tag:', error);
+      toast.error(`Failed to create tag "${tagName}"`, {
+        duration: 4000,
+        position: 'bottom-right',
+      });
+    }
   };
 
   // Filtered tags for the dropdown

@@ -6,16 +6,55 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.task import Tag
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
-@router.get("/", response_model=List[str])
-def get_tags(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Return all tags for the current user (just the tag names).
-    """
-    user_tags = db.query(Tag).filter(Tag.user_id == current_user.id).all()
-    return [tag.name for tag in user_tags]
+# Pydantic models for tag operations
+class TagCreate(BaseModel):
+    name: str
+
+class TagRead(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        orm_mode = True
+
+@router.post("/", response_model=TagRead)
+def create_tag(
+    tag_data: TagCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new tag for the current user."""
+    # Check if tag already exists for this user
+    existing_tag = db.query(Tag).filter(
+        Tag.user_id == current_user.id,
+        Tag.name.ilike(tag_data.name.strip())
+    ).first()
+
+    if existing_tag:
+        return existing_tag
+
+    # Create new tag
+    new_tag = Tag(
+        user_id=current_user.id,
+        name=tag_data.name.strip()
+    )
+    db.add(new_tag)
+    db.commit()
+    db.refresh(new_tag)
+    
+    return new_tag
+
+@router.get("/", response_model=List[TagRead])
+def get_tags(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all tags belonging to the current user."""
+    return db.query(Tag).filter(Tag.user_id == current_user.id).all()
 
 @router.delete("/{tag_name}")
 def delete_tag(
@@ -23,23 +62,15 @@ def delete_tag(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Delete a tag and remove it from all tasks that were using it.
-    """
-    # Find the tag
+    """Delete a tag by name."""
     tag = db.query(Tag).filter(
-        Tag.name == tag_name,
-        Tag.user_id == current_user.id
+        Tag.user_id == current_user.id,
+        Tag.name == tag_name
     ).first()
     
     if not tag:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tag not found"
-        )
+        raise HTTPException(status_code=404, detail="Tag not found")
     
-    # Delete the tag
     db.delete(tag)
     db.commit()
-    
-    return {"message": "Tag deleted successfully"}
+    return {"message": f"Tag '{tag_name}' deleted"}
