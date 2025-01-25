@@ -18,13 +18,51 @@ const SecuritySettings = () => {
 
   const handleEmailChange = async () => {
     try {
-      // TODO: Implement API call to change email
-      toast.success('Email updated successfully');
-      setCurrentEmail(newEmail);
+      setLoading(true);
+
+      // Basic validation
+      if (!newEmail) {
+        toast.error('New email is required', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        toast.error('Please enter a valid email address', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+        return;
+      }
+
+      // Update email through Supabase
+      const { error: updateError } = await supabase.auth.updateUser({
+        email: newEmail
+      });
+
+      if (updateError) throw updateError;
+
+      // Clear form and show success message
       setNewEmail('');
       setIsChangingEmail(false);
+      
+      toast.success('Email verification sent. Please check your new email.', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
+
     } catch (error) {
-      toast.error('Failed to update email');
+      console.error('Email change error:', error);
+      toast.error(error.message || 'Failed to update email', {
+        duration: 4000,
+        position: 'bottom-right',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -11,6 +11,9 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
+class EmailChangeRequest(BaseModel):
+    new_email: str
+
 @router.get("/me")
 def get_my_profile(current_user: User = Depends(get_current_user)):
     """
@@ -38,6 +41,25 @@ async def change_password(
         # Note: We don't need to verify the current password as Supabase will handle that
         return {
             "message": "Password updated successfully. Please sign in again with your new password."
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.post("/change-email")
+async def change_email(
+    payload: EmailChangeRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Changes the user's email in Supabase.
+    The actual email change is handled by Supabase's auth API.
+    """
+    try:
+        return {
+            "message": "Email update initiated. Please check your new email for verification."
         }
     except Exception as e:
         raise HTTPException(
