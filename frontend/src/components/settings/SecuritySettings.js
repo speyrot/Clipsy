@@ -1,13 +1,14 @@
 // frontend/src/components/settings/SecuritySettings.js
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { supabase } from "../../utils/supabaseClient";
 import { useNavigate } from "react-router-dom";
+import axiosInstance from "../../utils/axios";
 
 const SecuritySettings = () => {
   const navigate = useNavigate();
-  const [currentEmail, setCurrentEmail] = useState('john.smith@example.com');
+  const [currentEmail, setCurrentEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -15,6 +16,23 @@ const SecuritySettings = () => {
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await axiosInstance.get('/users/me');
+        setCurrentEmail(response.data.email);
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+        toast.error('Failed to load user profile', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   const handleEmailChange = async () => {
     try {
