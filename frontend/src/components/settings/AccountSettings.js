@@ -4,20 +4,68 @@ import React, { useState, useEffect } from "react";
 import { UserCircleIcon } from "@heroicons/react/24/solid";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../utils/axios";
+import { useDropzone } from "react-dropzone";
 
 const AccountSettings = () => {
-  const [profileImage, setProfileImage] = useState(null);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [userData, setUserData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    profilePicture: null
+  });
+
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.gif']
+    },
+    maxSize: 5 * 1024 * 1024, // 5MB
+    onDrop: async (acceptedFiles) => {
+      try {
+        const file = acceptedFiles[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await axiosInstance.put(
+          '/users/profile-picture',
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        );
+
+        setUserData(prev => ({
+          ...prev,
+          profilePicture: `${response.data.profile_picture_url}?ts=${Date.now()}`
+        }));
+        
+        toast.success('Profile picture updated successfully', {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+
+      } catch (error) {
+        console.error('Upload error:', error);
+        const errorMessage = error.response?.data?.detail || 'Failed to upload image';
+        toast.error(errorMessage, {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+      }
+    }
+  });
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         const response = await axiosInstance.get('/users/me');
-        setFirstName(response.data.first_name || '');
-        setLastName(response.data.last_name || '');
-        setEmail(response.data.email || '');
+        setUserData({
+          firstName: response.data.first_name || '',
+          lastName: response.data.last_name || '',
+          email: response.data.email || '',
+          profilePicture: response.data.profile_picture_url
+        });
       } catch (error) {
         console.error('Error fetching user profile:', error);
         toast.error('Failed to load user profile', {
@@ -43,16 +91,25 @@ const AccountSettings = () => {
           Profile Picture
         </label>
         <div className="flex items-center space-x-6">
-          <div className="relative">
-            {profileImage ? (
+          <div 
+            {...getRootProps()}
+            className="cursor-pointer relative group"
+          >
+            <input {...getInputProps()} />
+            {userData.profilePicture ? (
               <img
-                src={profileImage}
+                src={userData.profilePicture}
                 alt="Profile"
-                className="w-24 h-24 rounded-full object-cover"
+                className="w-24 h-24 rounded-full object-cover group-hover:opacity-75 transition-opacity"
               />
             ) : (
-              <UserCircleIcon className="w-24 h-24 text-gray-300" />
+              <UserCircleIcon className="w-24 h-24 text-gray-300 group-hover:text-gray-400 transition-colors" />
             )}
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity rounded-full flex items-center justify-center">
+              <span className="text-white opacity-0 group-hover:opacity-100 text-sm">
+                Change Photo
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -66,7 +123,7 @@ const AccountSettings = () => {
               First Name
             </label>
             <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500">
-              {firstName}
+              {userData.firstName}
             </div>
           </div>
 
@@ -76,7 +133,7 @@ const AccountSettings = () => {
               Last Name
             </label>
             <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500">
-              {lastName}
+              {userData.lastName}
             </div>
           </div>
         </div>
@@ -87,7 +144,7 @@ const AccountSettings = () => {
             Email
           </label>
           <div className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500">
-            {email}
+            {userData.email}
           </div>
         </div>
       </div>

@@ -11,12 +11,19 @@ import {
   EnvelopeIcon,
   CreditCardIcon
 } from '@heroicons/react/24/outline';
+import axiosInstance from '../utils/axios';
 
 function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const [userProfile, setUserProfile] = useState({
+    profilePicture: null,
+    firstName: '',
+    lastName: '',
+    email: ''
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -27,6 +34,24 @@ function Navbar() {
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch user profile data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await axiosInstance.get('/users/me');
+        setUserProfile({
+          profilePicture: response.data.profile_picture_url,
+          firstName: response.data.first_name,
+          lastName: response.data.last_name,
+          email: response.data.email
+        });
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      }
+    };
+    fetchProfile();
   }, []);
 
   // Determine if nav link is active
@@ -64,6 +89,23 @@ function Navbar() {
       toast.error('Failed to log out');
     }
   };
+
+  // Update the avatar image and user info
+  const avatarContent = userProfile.profilePicture ? (
+    <img
+      src={`${userProfile.profilePicture}?ts=${Date.now()}`}
+      alt="User Avatar"
+      className="w-9 h-9 rounded-full object-cover hover:ring-2 hover:ring-purple-500 transition-all"
+      onError={(e) => {
+        e.target.onerror = null; 
+        e.target.src = 'https://via.placeholder.com/40';
+      }}
+    />
+  ) : (
+    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+      <UserIcon className="w-5 h-5 text-gray-400" />
+    </div>
+  );
 
   return (
     <nav className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
@@ -131,20 +173,18 @@ function Navbar() {
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center focus:outline-none"
           >
-            <img
-              src="https://via.placeholder.com/40"
-              alt="User Avatar"
-              className="w-9 h-9 rounded-full object-cover hover:ring-2 hover:ring-purple-500 transition-all"
-            />
+            {avatarContent}
           </button>
 
           {/* Dropdown Menu */}
           {isDropdownOpen && (
             <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
-              {/* User Name */}
+              {/* Updated User Info */}
               <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-900">John Smith</p>
-                <p className="text-xs text-gray-500">john.smith@example.com</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {userProfile.firstName} {userProfile.lastName}
+                </p>
+                <p className="text-xs text-gray-500 truncate">{userProfile.email}</p>
               </div>
 
               {/* Account */}
