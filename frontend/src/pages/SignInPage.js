@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
+import { toast } from 'react-hot-toast';
+import axiosInstance from '../utils/axios';
 
 function SignInPage() {
   const navigate = useNavigate();
@@ -52,6 +54,20 @@ function SignInPage() {
 
         const data = JSON.parse(responseText);
         localStorage.setItem('backend_token', data.token);
+        
+        // Get user profile for welcome message
+        try {
+          const userResponse = await axiosInstance.get('/users/me');
+          const firstName = userResponse.data.first_name;
+          toast.success(`Welcome back, ${firstName}!`, {
+            duration: 4000,
+            position: 'bottom-right',
+          });
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+          toast.success('Welcome back!'); // Fallback message
+        }
+        
         navigate('/');
       }
     } catch (error) {
