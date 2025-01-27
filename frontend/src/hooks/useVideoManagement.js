@@ -25,8 +25,11 @@ export const useVideoManagement = () => {
       s3Url: uploadedData.s3_url,
       filename: uploadedData.filename,
       thumbnail: uploadedData.thumbnail_url || '/placeholder-thumbnail.jpg',
+      uploaded_at: new Date().toISOString()  // Add timestamp for sorting
     };
-    setUploadedVideos(prev => [...prev, newVideo]);
+    
+    // Prepend the new video to the beginning of the array
+    setUploadedVideos(prev => [newVideo, ...prev]);
   }, []);
 
   // Handle processing completion

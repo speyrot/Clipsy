@@ -38,6 +38,7 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
       style: {
         border: '2px solid #6B7280',
       },
+      duration: Infinity,
     });
 
     try {
@@ -63,8 +64,8 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
         onUploadComplete(uploadData);
       }
 
-      toast.dismiss(loadingToast);
-      toast.success('Video uploaded successfully!', {
+      toast.success('Video uploaded successfully!', { 
+        id: loadingToast,
         style: {
           border: '2px solid #9333EA',
         },
@@ -73,7 +74,13 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
       setIsUploading(false);
     } catch (error) {
       console.error('Error during upload:', error.response || error);
-      toast.dismiss(loadingToast);
+      
+      toast.error(error.response?.data?.detail || 'An error occurred during the upload', { 
+        id: loadingToast,
+        style: {
+          border: '2px solid #DC2626',
+        },
+      });
       
       if (error.response?.status === 401) {
         toast.error('Session expired. Please log in again', {
@@ -104,12 +111,6 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
           console.error('Error refreshing token:', refreshError);
         }
         window.location.href = '/login';
-      } else {
-        toast.error(error.response?.data?.detail || 'An error occurred during the upload', {
-          style: {
-            border: '2px solid #DC2626',
-          },
-        });
       }
       
       setIsUploading(false);
