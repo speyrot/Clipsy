@@ -22,7 +22,7 @@ export const useVideoManagement = () => {
   const handleUploadComplete = useCallback((uploadedData) => {
     const newVideo = {
       id: uploadedData.video_id,
-      s3Url: uploadedData.s3_url,
+      upload_path: uploadedData.s3_url,
       filename: uploadedData.filename,
       thumbnail: uploadedData.thumbnail_url || '/placeholder-thumbnail.jpg',
       uploaded_at: new Date().toISOString()  // Add timestamp for sorting
