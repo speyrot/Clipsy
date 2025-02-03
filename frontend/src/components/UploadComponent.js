@@ -66,6 +66,7 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
 
       toast.success('Video uploaded successfully!', { 
         id: loadingToast,
+        duration: 4000,
         style: {
           border: '2px solid #9333EA',
         },
@@ -77,6 +78,7 @@ const UploadComponent = ({ onUploadComplete, inputId }) => {
       
       toast.error(error.response?.data?.detail || 'An error occurred during the upload', { 
         id: loadingToast,
+        duration: 4000,
         style: {
           border: '2px solid #DC2626',
         },
